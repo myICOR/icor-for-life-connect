@@ -1,5 +1,5 @@
 /*
- * myICOR Connect — Obsidian plugin for the ICOR for Life Scaffold.
+ * ICOR for Life - Connect: the Obsidian plugin for the ICOR for Life Scaffold.
  *
  * What it does:
  *   1. Adds a myICOR button at the bottom of the folder tree (file explorer).
@@ -680,7 +680,7 @@ class MyicorConnectPlugin extends Plugin {
      * somebody their plain vault is broken would be the louder wrong answer. */
     if (missing.length === ROOMS.length) return;
     if (missing.length === 0) return;
-    const message = 'myICOR Connect: this vault has no room ' + missing.join(', ')
+    const message = 'ICOR for Life - Connect: this vault has no room ' + missing.join(', ')
       + '. Those dashboards and their folder buttons are unavailable until the rooms are there.';
     console.warn(message);
     new Notice(message, 12000);
@@ -1136,7 +1136,7 @@ class MyicorConnectPlugin extends Plugin {
     const sep = gi === '' || gi.endsWith('\n') ? '' : '\n';
     await adapter.write(
       '.gitignore',
-      gi + sep + '\n# myICOR Connect token store (hard rule 9: secrets never reach git)\n' + line + '\n'
+      gi + sep + '\n# ICOR for Life - Connect token store (hard rule 9: secrets never reach git)\n' + line + '\n'
     );
   }
 }

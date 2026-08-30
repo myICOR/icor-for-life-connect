@@ -1,4 +1,4 @@
-# myICOR Connect
+# ICOR for Life - Connect
 
 Your app.myicor.com account, inside your vault. Connect once on the
 desktop and your ICOR Journey, your Growth Assignments, your courses and
@@ -113,31 +113,31 @@ device with the vault.
 
 ## ICOR for Life Obsidian Edition
 
-myICOR Connect is the bridge of the **ICOR for Life Obsidian Edition**:
+ICOR for Life - Connect is the bridge of the **ICOR for Life Obsidian Edition**:
 ICOR (Input, Control, Output, Refine), the productivity methodology by
 Paperless Movement / myICOR, implemented as a ready-to-use Obsidian
 vault. The vault is where you run the method; the courses on myicor.com
 are where you learn it; Connect is where the two meet.
 Best to be used in combination with:
 
-- **[ICOR for Life INKLINE theme](https://community.obsidian.md/themes/icor-for-life-inkline)**,
+- **[ICOR for Life - INKLINE theme](https://community.obsidian.md/themes/icor-for-life-inkline)**,
   the hand-drawn ICOR look every surface of the Edition is designed
   against. The Connect dashboards have no palette of their own; with
   INKLINE installed their cards render hand-drawn in ink and paper mode
   alike.
-- **[ICOR Planner](https://obsidian.md/plugins?id=icor-for-life-planner)**, the weekly
+- **[ICOR for Life - Planner](https://obsidian.md/plugins?id=icor-for-life-planner)**, the weekly
   planning board: Todoist, ClickUp, starred email and Google Calendar
   synced into the vault, planned by drag and drop. The ICOR Journey
   teaches the weekly practice; the Planner is where you run it, week
   after week.
-- **[ICOR Focus](https://obsidian.md/plugins?id=icor-for-life-focus)**, the gravity map
+- **[ICOR for Life - Focus](https://obsidian.md/plugins?id=icor-for-life-focus)**, the gravity map
   of your vault: what you touched today sits close, older work ripples
   outward. The Journey builds the habits; Focus shows whether they are
   holding.
-- **[ICOR Diagrams](https://obsidian.md/plugins?id=icor-for-life-diagrams)**, a
+- **[ICOR for Life - Diagrams](https://obsidian.md/plugins?id=icor-for-life-diagrams)**, a
   fullscreen viewer with zoom and pan for the mermaid diagrams in your
   notes, including the ones the lessons ask you to draw.
-- **[ICOR AI Chat](https://obsidian.md/plugins?id=icor-for-life-chat)**, your AI team
+- **[ICOR for Life - Chat](https://obsidian.md/plugins?id=icor-for-life-chat)**, your AI team
   in a tab beside your notes, working from your vault's own instructions.
   The Journey teaches the method; the team helps you apply it to the notes
   in front of you.

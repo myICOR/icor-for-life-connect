@@ -1,6 +1,6 @@
 # Security Policy
 
-myICOR Connect is an Obsidian plugin that signs you in to your app.myicor.com
+ICOR for Life - Connect is an Obsidian plugin that signs you in to your app.myicor.com
 account from inside your vault and exposes vault context over MCP. It holds an
 OAuth token and it opens a local loopback listener during sign-in. Those are the
 two parts worth attacking, and we would rather hear about a problem early than
