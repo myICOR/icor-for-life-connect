@@ -120,7 +120,7 @@ vault. The vault is where you run the method; the courses on myicor.com
 are where you learn it; Connect is where the two meet.
 Best to be used in combination with:
 
-- **[myICOR INKLINE theme](https://community.obsidian.md/themes/icor-for-life-inkline)**,
+- **[ICOR for Life INKLINE theme](https://community.obsidian.md/themes/icor-for-life-inkline)**,
   the hand-drawn ICOR look every surface of the Edition is designed
   against. The Connect dashboards have no palette of their own; with
   INKLINE installed their cards render hand-drawn in ink and paper mode
