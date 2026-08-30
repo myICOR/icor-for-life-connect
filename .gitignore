@@ -1,0 +1,3 @@
+# OAuth token store - never in git (hard rule 9)
+data.json
+.DS_Store

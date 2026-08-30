@@ -1,0 +1,23 @@
+name: Version gate
+
+# The independent alarm: nightly and on demand, with no release step in front
+# of it, so drift introduced by anything other than a push to main is still
+# caught. Reports by opening an issue, because a red badge on a repo nobody
+# opens is not a signal. The on-push verification lives at the end of Release.
+
+on:
+  schedule:
+    - cron: '35 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    permissions:
+      contents: read
+      issues: write
+    uses: myICOR/.github/.github/workflows/obsidian-version-gate.yml@main
+    with:
+      kind: plugin

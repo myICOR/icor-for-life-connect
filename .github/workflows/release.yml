@@ -1,0 +1,34 @@
+name: Release
+
+# Push to main. If the manifest version has no matching tag, cut the tag and
+# publish the release with exactly the right asset set. manifest.json is the
+# source of truth for the version; nothing here derives a version from commit
+# messages. Idempotent, so a push that does not change the version is a no-op.
+#
+# The gate runs AFTER the release job, never beside it. Run in parallel they
+# race: the gate reads the repo before the release exists and cries wolf on
+# every version bump. Measured on the selftest fixture 2026-08-30.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: myICOR/.github/.github/workflows/obsidian-release.yml@main
+    with:
+      kind: plugin
+
+  verify:
+    needs: release
+    permissions:
+      contents: read
+      issues: write
+    uses: myICOR/.github/.github/workflows/obsidian-version-gate.yml@main
+    with:
+      kind: plugin
