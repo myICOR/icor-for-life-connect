@@ -1,7 +1,7 @@
 {
   "id": "icor-for-life-connect",
   "name": "ICOR for Life - Connect",
-  "version": "0.12.1",
+  "version": "0.13.0",
   "minAppVersion": "1.4.0",
   "description": "Your app.myicor.com account inside your vault: ICOR Journey and Growth Assignment dashboards, knowledge-base search, reflections synced as notes you own, and myICOR context for Claude sessions. Part of the ICOR for Life suite.",
   "author": "myICOR",

@@ -25,6 +25,11 @@
 const { Plugin, ItemView, Notice, requestUrl, setIcon } = require('obsidian');
 
 const BASE_URL = 'https://app.myicor.com';
+/* The public landing page, which is NOT the member app: the banner is the one
+   place this plugin points at myicor.com rather than app.myicor.com, because
+   the person clicking a picture in their sidebar is not asking to be dropped
+   into a dashboard. */
+const SITE_URL = 'https://myicor.com';
 const MCP_URL = BASE_URL + '/api/mcp';
 const AUTHORIZE_URL = BASE_URL + '/mcp/authorize';
 const TOKEN_URL = BASE_URL + '/api/oauth/token';
@@ -362,6 +367,7 @@ class MyicorConnectPlugin extends Plugin {
       this.resolveRooms();
       this.sweepRetiredRail();
       this.attachExplorerButton();
+      this.attachBanner();
       this.attachRoomButtons();
       this.syncCollapseSlot();
       /* the explorer re-renders folder rows on collapse/expand and vault
@@ -383,12 +389,14 @@ class MyicorConnectPlugin extends Plugin {
     });
     this.registerEvent(this.app.workspace.on('layout-change', () => {
       this.attachExplorerButton();
+      this.attachBanner();
       this.syncCollapseSlot();
     }));
   }
 
   onunload() {
     if (this.explorerButtonEl) this.explorerButtonEl.remove();
+    if (this.bannerEl) this.bannerEl.remove();
     if (this.roomObserver) this.roomObserver.disconnect();
     /* The slot classes are ours and the container is Obsidian's, so they come
        off on the way out. Left behind they would outlive the CSS that reads
@@ -405,7 +413,7 @@ class MyicorConnectPlugin extends Plugin {
        that made it on purpose, because an in-place upgrade from a build
        that still injected it leaves the nodes behind with nothing left to
        take them out. */
-    for (const el of document.querySelectorAll('.micor-room-btn, .micor-top-btn, .micor-unique-note, .micor-daily-note, .micor-new-canvas, .micor-graph-view, .micor-toolbar-extra')) el.remove();
+    for (const el of document.querySelectorAll('.micor-room-btn, .micor-top-btn, .micor-unique-note, .micor-daily-note, .micor-new-canvas, .micor-graph-view, .micor-banner, .micor-toolbar-extra')) el.remove();
     this.sweepRetiredRail();
     this.closeAuthServer();
   }
@@ -531,6 +539,72 @@ class MyicorConnectPlugin extends Plugin {
       if (btn.querySelector('svg.lucide-chevrons-down-up')) return btn;
     }
     return null;
+  }
+
+  /* THE BANNER, WHICH THE THEME ALREADY DRAWS.
+   *
+   * INKLINE paints the ICOR for Life banner over the folder tree as a
+   * `::before` on `.nav-header`, and it looks right with no plugin at all.
+   * What it cannot be is CLICKABLE: a theme is CSS, and CSS has no way to
+   * make a pseudo-element navigate anywhere.
+   *
+   * So this injects the one thing only the DOM can provide - a real anchor -
+   * and the theme takes it from there. The handover is the class name
+   * `micor-banner` and nothing else: INKLINE styles `a.micor-banner` with the
+   * same artwork at the same geometry, and stands its painted copy down with
+   * `:has(a.micor-banner)`. THE ARTWORK IS NOT HERE. It lives once, in the
+   * theme, and a copy in this plugin would be the copy that goes stale.
+   *
+   * Which means the honest failure mode is worth naming: with a theme that
+   * does not know this class, the anchor renders as an empty 4:1 box. It is
+   * created only when the header carries INKLINE's own painted banner, which
+   * is how it tells that the theme on the other side of the handover is the
+   * one holding up its end.
+   *
+   * Rebuild rather than early-return, for the reason attachExplorerButton
+   * gives: an anchor left by an earlier instance keeps its old handler. */
+  attachBanner() {
+    const header = document.querySelector(
+      '.workspace-leaf-content[data-type="file-explorer"] .nav-header');
+    if (!header) return;
+
+    const stale = header.querySelector('a.micor-banner');
+    if (stale) {
+      if (stale.dataset.micorVersion === this.manifest.version
+        && stale.dataset.micorInstance === String(this.instanceId)) return;
+      stale.remove();
+    }
+
+    /* Does the active theme paint a banner here? Read the pseudo-element the
+       theme would have drawn, with the anchor absent, and look for an image.
+       A theme with no opinion about `.nav-header::before` reports `none` and
+       gets no anchor - so this never leaves an empty box on a theme that was
+       not built for it. */
+    const painted = window.getComputedStyle(header, '::before');
+    if (!painted || painted.backgroundImage === 'none' || painted.content === 'none') return;
+
+    const link = header.createEl('a', { cls: 'micor-banner' });
+    header.prepend(link);
+    link.dataset.micorVersion = this.manifest.version;
+    link.dataset.micorInstance = String(this.instanceId);
+    /* setAttribute rather than createEl's `href` option: that option has not
+       been supported uniformly across the Obsidian API versions this plugin
+       runs on, and an anchor with no href is not a link at all - no pointer,
+       no keyboard focus, nothing in the status bar on hover. */
+    link.setAttribute('href', SITE_URL);
+    link.setAttribute('aria-label', 'ICOR for Life - myicor.com');
+    link.setAttribute('rel', 'noopener noreferrer');
+
+    /* Handled rather than left to the host: an href alone behaves differently
+       across Obsidian's desktop and mobile shells, and a banner that opens a
+       page INSIDE the vault window is a trap the user has to find their way
+       out of. */
+    link.addEventListener('click', (evt) => {
+      evt.preventDefault();
+      window.open(SITE_URL, '_blank');
+    });
+
+    this.bannerEl = link;
   }
 
   attachExplorerButton() {
