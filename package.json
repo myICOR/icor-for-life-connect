@@ -4,5 +4,6 @@
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.mjs"
-  }
+  },
+  "license": "LicenseRef-ICOR-Source-Available-1.0"
 }

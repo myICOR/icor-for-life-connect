@@ -148,7 +148,14 @@ vault: https://myicor.com
 
 ## License
 
-Please note that while the source can be read and modified for your
-personal use, this plugin is not open source. It is licensed under the
-ICOR for Life Source-Available License (Code) - see the `LICENSE` file
-for the full terms. Third-party notices live in `THIRD-PARTY-NOTICES.md`.
+What you can do: install it, run it, read the code, modify your own copy,
+and use it in your own business. What you cannot do: sell it, redistribute
+it, or offer it (original or modified) as your own product or service to
+others. Contributions: send a pull request. See `CONTRIBUTING.md`;
+submitting one grants Paperless Movement the rights described in Section 7
+of the LICENSE. This is not open source. It is source-available: the code
+is visible, personal and business use are free, resale and republishing
+are not. Bundled third-party components keep their own licenses; see
+`THIRD-PARTY-NOTICES.md`.
+
+Full text in LICENSE. Machine-readable identifier: LicenseRef-ICOR-Source-Available-1.0.
