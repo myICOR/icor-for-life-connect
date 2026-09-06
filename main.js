@@ -249,10 +249,13 @@ class MyicorConnectPlugin extends Plugin {
 
     /* The thin ribbon is hidden by the scaffold's own snippet, so this
      * plugin registers NO ribbon action: an icon on a hidden surface is
-     * not an entry point. Its routes are the top row (gear + terminal,
-     * attachTopButtons), the folder-tree footer button, and this command.
-     * The four vault actions below are palette commands for the same
-     * reason - see the block after this one. */
+     * not an entry point. Its routes are the top row (gear, attachTopButtons),
+     * the folder-tree footer button, and this command. The terminal used to
+     * live in that top row too; it is ICOR for Life - Terminal's own toolbar
+     * entry now, under the ICOR for Life logo in the left side panel, so it
+     * is not this plugin's route to guard any more. The four vault actions
+     * below are palette commands for the same reason - see the block after
+     * this one. */
     this.addCommand({
       id: 'open-dashboard',
       name: 'Open myICOR dashboard',
@@ -712,25 +715,21 @@ class MyicorConnectPlugin extends Plugin {
     bar.insertBefore(daily, unique);
   }
 
-  /* Terminal + settings live together in the right sidebar's top row
-   * (the left header stays stock - injecting there raced Obsidian's
-   * own sidebar toggle and shuffled the order on collapse/reopen). */
+  /* The settings gear lives alone in the right sidebar's top row now
+   * (the left header stays stock - injecting there raced Obsidian's own
+   * sidebar toggle and shuffled the order on collapse/reopen). This row
+   * used to also carry a terminal shortcut wired to the retired
+   * third-party Terminal plugin; the terminal is ICOR for Life - Terminal
+   * now, launched from its own toolbar entry under the ICOR for Life logo
+   * in the left side panel, so this method does not touch it any more. */
   attachTopButtons() {
     const right = document.querySelector('.workspace-split.mod-right-split .workspace-tab-header-container');
-    if (!right || right.querySelector('.micor-top-terminal')) return;
-
-    const term = createDiv({ cls: 'clickable-icon micor-top-btn micor-top-terminal', attr: { 'aria-label': 'Open terminal' } });
-    setIcon(term, 'terminal');
-    term.addEventListener('click', () => {
-      const ran = this.app.commands.executeCommandById('terminal:open-terminal.integrated.root');
-      if (!ran) new Notice('myICOR: enable the Terminal plugin to use this button.');
-    });
+    if (!right || right.querySelector('.micor-top-settings')) return;
 
     const gear = createDiv({ cls: 'clickable-icon micor-top-btn micor-top-settings', attr: { 'aria-label': 'Settings' } });
     setIcon(gear, 'settings');
     gear.addEventListener('click', () => this.app.setting.open());
 
-    right.appendChild(term);
     right.appendChild(gear);
   }
 

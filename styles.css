@@ -119,7 +119,9 @@
  * ribbon back for other plugins without touching this plugin. The
  * replacement buttons below exist either way. */
 
-/* terminal + settings in the very top row */
+/* settings in the very top row (the terminal shortcut that used to live
+ * here is gone; the terminal is ICOR for Life - Terminal's own toolbar
+ * entry now, under the ICOR for Life logo in the left side panel) */
 .micor-top-btn {
   align-self: center;
   color: var(--ink-paper-faint, var(--text-faint));
@@ -127,8 +129,6 @@
   margin-right: 2px;
 }
 .micor-top-btn:hover { color: var(--ink-paper, var(--text-normal)); }
-.micor-top-terminal { color: var(--ink-marker, #ff5a2d); }
-.micor-top-terminal:hover { color: var(--ink-marker-fill-hover, #ff7248); }
 
 
 /* ------------------------------------------------------------ header ---- */
