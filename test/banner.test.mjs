@@ -68,6 +68,7 @@ function loadPlugin({ themePaints = true } = {}) {
     Notice: class { constructor() {} },
     requestUrl: async () => { throw new Error('no network in this gate'); },
     setIcon: (el, icon) => { el.attrs['data-icon'] = icon; },
+    Platform: { isDesktopApp: true, isMobileApp: false },
   };
 
   const sandbox = {

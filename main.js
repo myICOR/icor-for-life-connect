@@ -22,7 +22,7 @@
 
 'use strict';
 
-const { Plugin, ItemView, Notice, requestUrl, setIcon } = require('obsidian');
+const { Plugin, ItemView, Notice, requestUrl, setIcon, Platform } = require('obsidian');
 
 const BASE_URL = 'https://app.myicor.com';
 /* The public landing page, which is NOT the member app: the banner is the one
@@ -833,13 +833,18 @@ class MyicorConnectPlugin extends Plugin {
     /* The loopback callback server and PKCE need node http/crypto, which the
      * mobile webview does not have. The token itself syncs with the vault
      * (data.json rides iCloud/Obsidian Sync), so one desktop connect covers
-     * every device. */
-    let http = null;
-    try { http = require('http'); require('crypto'); } catch (e) { http = null; }
-    if (!http) {
+     * every device.
+     *
+     * The check is the first statement, before any require: that is the
+     * guard shape the community directory's scanner recognises for a plugin
+     * that keeps isDesktopOnly false (same shape as Planner's imapConnect).
+     * A try/catch around the require does not read as a guard to it. */
+    if (!Platform.isDesktopApp) {
       new Notice('Connecting needs the desktop app once. Connect there and the connection syncs to this device with the vault.', 8000);
       throw new Error('connecting requires the desktop app');
     }
+    const http = require('http');
+    require('crypto');
     const pkce = makePkce();
 
     const codePromise = new Promise((resolve, reject) => {
