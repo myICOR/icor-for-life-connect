@@ -12,3 +12,6 @@ pull request.
 
 For security issues, use the process in SECURITY.md instead of a public
 pull request.
+
+Releases are cut from a version tag, never from a push to `main`. The
+steps are in the README under "Releasing".

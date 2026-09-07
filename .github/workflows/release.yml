@@ -1,9 +1,16 @@
 name: Release
 
-# Push to main. If the manifest version has no matching tag, cut the tag and
-# publish the release with exactly the right asset set. manifest.json is the
-# source of truth for the version; nothing here derives a version from commit
-# messages. Idempotent, so a push that does not change the version is a no-op.
+# A release is a bare version tag (0.14.1, never v0.14.1: the Obsidian
+# directory reads the tag as the version). A plain push to main never cuts
+# a release; it only ever lands code. Tom decisions r7k and t5m, 2026-09-07,
+# after Interface 0.6.3 shipped from a push before Flint's review-before-ship
+# read.
+#
+# manifest.json stays the source of truth for the version. The guard job
+# refuses a tag that does not equal manifest.json's version, and a tag that
+# is not on main. Only then does the shared release logic publish, with the
+# same asset set (main.js, manifest.json, styles.css) and the same notes
+# (commit subjects since the previous tag) as before.
 #
 # The gate runs AFTER the release job, never beside it. Run in parallel they
 # race: the gate reads the repo before the release exists and cries wolf on
@@ -11,13 +18,40 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
   contents: read
 
 jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the tagged commit (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: The tag is the manifest version, and it sits on main
+        run: |
+          MANIFEST=$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")
+          if [ "$MANIFEST" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not equal manifest.json version $MANIFEST"
+            exit 1
+          fi
+          git fetch --no-tags --force origin "+refs/heads/main:refs/remotes/origin/main"
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::tag $GITHUB_REF_NAME points at $GITHUB_SHA, which is not on main"
+            exit 1
+          fi
+          echo "tag $GITHUB_REF_NAME == manifest.json $MANIFEST, on main"
+
   release:
+    needs: guard
     permissions:
       contents: write
     uses: myICOR/.github/.github/workflows/obsidian-release.yml@main

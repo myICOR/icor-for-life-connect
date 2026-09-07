@@ -111,6 +111,22 @@ OAuth connect needs the desktop app (the browser callback lands on a local
 loopback server); once connected there, the connection syncs to every
 device with the vault.
 
+## Releasing
+
+A release is cut only when a version tag is pushed. A plain push to `main`
+never releases anything.
+
+1. Bump the version in 3 files: `manifest.json`, `versions.json` (new line, same `minAppVersion`) and `package.json`.
+2. Push to `main`. Nothing ships yet.
+3. Flint reads the diff before ship. No read, no tag.
+4. Tag the commit with the bare version and push the tag:
+   `git tag -a 0.14.1 -m "ICOR for Life - Connect 0.14.1" && git push github 0.14.1`
+   (never `v0.14.1`: the Obsidian directory reads the tag as the version).
+
+The Release workflow refuses a tag that does not equal `manifest.json`'s
+version or that is not on `main`, then publishes `main.js`, `manifest.json` and `styles.css` with the commit subjects since the previous tag as notes.
+The nightly version gate still checks that tag, branch and release agree.
+
 ## ICOR for Life Obsidian Edition
 
 ICOR for Life - Connect is the bridge of the **ICOR for Life Obsidian Edition**:
