@@ -94,16 +94,22 @@ the plugin's settings tab:
   entries carry its name: `icor-for-life-connect-access-token` and
   `icor-for-life-connect-refresh-token`.
 - **An env file in the vault**: the only choice on older Obsidian, and
-  the choice when one connection should follow the vault to every device.
+  the choice when one connection should follow the vault to every device
+  through a sync that carries hidden files.
   The keys are two `KEY=value` lines, `MYICOR_ACCESS_TOKEN` and
   `MYICOR_REFRESH_TOKEN`, in the file named by the "Env file" setting
   (default `06 AI Team/AI Team Knowledge/.env`, vault-relative). The
   plugin reads plain `KEY=value` lines and `#` comments, no quotes, no
   interpolation, first occurrence of a key wins. When it writes, it
   changes or appends those two lines and leaves every other byte of the
-  file alone. The file rides with the vault, so it is in every backup and
-  sync of the vault; the plugin adds its path to the vault's `.gitignore`
-  the way it always did for `data.json`.
+  file alone. The path is vault-relative and checked: no absolute path and
+  no `..`, so it cannot point outside the vault. The file rides with the
+  vault, so it is in every backup of the vault and in every sync that
+  carries hidden files: iCloud Drive, git and Dropbox do; Obsidian Sync
+  skips files whose name starts with a dot, and the default name does.
+  With Obsidian Sync, paste the refresh token into the settings tab on the
+  other device. The plugin adds the path to the vault's `.gitignore` the
+  way it always did for `data.json`.
 
 `data.json` keeps only the scope and the expiry time, never a key. A vault
 that connected with an older Connect has its keys moved out of `data.json`
@@ -152,10 +158,13 @@ connect.
 The dashboards, search and courses work on phone and tablet. The one-time
 OAuth connect needs the desktop app (the browser callback lands on a local
 loopback server). Whether that one connect reaches your phone depends on
-where the keys live: with the env file, the connection follows the vault to
-every device; with Obsidian's keychain, each device keeps its own keys and
-Obsidian Sync does not carry them, so a phone is connected by pasting the
-refresh token into its settings tab, or by switching to the env file.
+where the keys live. With the env file, the connection follows the vault
+when your sync carries hidden files (iCloud Drive, git and Dropbox do;
+Obsidian Sync skips files whose name starts with a dot, and the default
+env file is one). With Obsidian's keychain, each device keeps its own keys
+and no sync carries them. In both cases where the sync does not bring the
+keys along, a phone is connected by pasting the refresh token into its
+settings tab.
 
 ## Releasing
 

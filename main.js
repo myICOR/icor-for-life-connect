@@ -252,8 +252,13 @@ function callbackHtml(ok, detail) {
  *                     is why every id carries this plugin's prefix.
  *   'env-file'        KEY=value lines in a file inside the vault, default
  *                     `06 AI Team/AI Team Knowledge/.env`. Rides with the
- *                     vault, so it syncs; the plugin adds the path to
- *                     .gitignore the way it always did for data.json.
+ *                     vault, so a sync that carries hidden files takes it
+ *                     along (iCloud Drive, git and Dropbox do; Obsidian
+ *                     Sync skips files whose name starts with a dot, and
+ *                     the default name does). The plugin adds the path to
+ *                     .gitignore the way it always did for data.json. The
+ *                     path is vault-relative and checked: no absolute
+ *                     path, no `..`, so it cannot leave the vault.
  *
  * The default is the keychain when the API exists, else the env file, and
  * the choice is written to data.json the first time this build loads, so a
@@ -270,7 +275,10 @@ function callbackHtml(ok, detail) {
  * other byte of the file as it was, comments included. A key that appears
  * twice is read from and written to its FIRST line, so reader and writer
  * agree. Values are taken literally: no quotes are stripped, nothing is
- * interpolated. Blanking a key writes `KEY=` rather than deleting the line.
+ * interpolated. Blanking a key writes `KEY=` rather than deleting the line;
+ * blanking a key the file does not have changes nothing. A value with a
+ * line break is refused (thrown), because a second line would be parsed as
+ * a second key by this plugin and by every shell that sources the file.
  * ------------------------------------------------------------------------- */
 
 const SECRET_ID_PREFIX = 'icor-for-life-connect-';
@@ -301,6 +309,20 @@ function defaultSecretsBackend(app) {
 function effectiveSecretsBackend(choice, app) {
   if (choice === 'secret-storage' && secretStorageUsable(app && app.secretStorage)) return 'secret-storage';
   return 'env-file';
+}
+
+/* The env file path as the member typed it, checked and tidied: slashes
+   one way, no empty or `.` segments, and refused when it is absolute, home
+   relative or climbs out of the vault with `..`. Same shape as Planner's
+   normalizeEnvFilePath; the error sentences carry no value. */
+function normalizeEnvFilePath(v) {
+  const raw = String(v == null ? '' : v).trim().replace(/\\/g, '/');
+  if (!raw) return { ok: false, path: '', error: 'Enter a path inside the vault, for example ' + DEFAULT_ENV_FILE_PATH + '.' };
+  if (/^([a-zA-Z]:)?\//.test(raw) || raw.startsWith('~')) return { ok: false, path: '', error: 'The path is relative to the vault root, not an absolute path.' };
+  const parts = raw.split('/').filter((p) => p !== '' && p !== '.');
+  if (parts.some((p) => p === '..')) return { ok: false, path: '', error: 'The path must stay inside the vault (no "..").' };
+  if (!parts.length) return { ok: false, path: '', error: 'Enter a file name, not a folder.' };
+  return { ok: true, path: parts.join('/'), error: '' };
 }
 
 function envLineEnding(text) {
@@ -335,6 +357,7 @@ function parseEnvFile(text) {
 function upsertEnvLine(text, key, value) {
   const src = String(text || '');
   const v = String(value == null ? '' : value);
+  if (/[\r\n]/.test(v)) throw new Error('an env value cannot contain a line break');
   const lines = src.split('\n');
   for (let i = 0; i < lines.length; i++) {
     const kv = parseEnvLine(lines[i]);
@@ -343,6 +366,8 @@ function upsertEnvLine(text, key, value) {
     lines[i] = key + '=' + v + cr;
     return lines.join('\n');
   }
+  /* Blanking a key the file never had would only add an empty line. */
+  if (!v) return src;
   const eol = envLineEnding(src);
   if (src === '') return key + '=' + v + eol;
   return src + (src.endsWith('\n') ? '' : eol) + key + '=' + v + eol;
@@ -397,11 +422,19 @@ class KeychainBackend {
     return out;
   }
   /* setSecret throws on a bad id and never carries a value in the message.
-     Writing '' is the API's only way to clear an entry (no delete). */
+     A blank clears: through deleteSecret where the API has one, else by
+     writing '' to an entry that exists; an id the store does not hold is
+     left unwritten, so a disconnect never creates empty entries. */
   async write(values) {
     for (const f of SECRET_FIELD_NAMES) {
       if (!(f in values)) continue;
-      this.storage.setSecret(SECRET_FIELDS[f].id, String(values[f] == null ? '' : values[f]).trim());
+      const id = SECRET_FIELDS[f].id;
+      const v = String(values[f] == null ? '' : values[f]).trim();
+      if (v) { this.storage.setSecret(id, v); continue; }
+      if (typeof this.storage.deleteSecret === 'function') { this.storage.deleteSecret(id); continue; }
+      let cur = null;
+      try { cur = this.storage.getSecret(id); } catch (e) { cur = null; }
+      if (typeof cur === 'string' && cur !== '') this.storage.setSecret(id, '');
     }
   }
 }
@@ -691,9 +724,10 @@ class MyicorConnectPlugin extends Plugin {
   secretsBackend() {
     return effectiveSecretsBackend(this.secretsBackendChoice(), this.app);
   }
+  /* The path in use: the setting when it passes the check, else the
+     default. A stored value that fails the check never reaches the disk. */
   envFilePath() {
-    const p = typeof this.data.envFilePath === 'string' ? this.data.envFilePath.trim() : '';
-    return p || DEFAULT_ENV_FILE_PATH;
+    return normalizeEnvFilePath(this.data.envFilePath).path || DEFAULT_ENV_FILE_PATH;
   }
   secretsBackendFor(name) {
     if (name === 'secret-storage') return new KeychainBackend(this.app.secretStorage);
@@ -714,8 +748,9 @@ class MyicorConnectPlugin extends Plugin {
       this.data.secretsBackend = defaultSecretsBackend(this.app);
       changed = true;
     }
-    if (typeof this.data.envFilePath !== 'string' || !this.data.envFilePath.trim()) {
-      this.data.envFilePath = DEFAULT_ENV_FILE_PATH;
+    const envPath = normalizeEnvFilePath(this.data.envFilePath).path || DEFAULT_ENV_FILE_PATH;
+    if (this.data.envFilePath !== envPath) {
+      this.data.envFilePath = envPath;
       changed = true;
     }
     await this.ensureGitignore();
@@ -1207,9 +1242,9 @@ class MyicorConnectPlugin extends Plugin {
     if (!Platform.isDesktopApp) {
       new Notice(
         this.secretsBackend() === 'env-file'
-          ? 'Connecting needs the desktop app once. Connect there and the connection syncs to this device with the vault.'
+          ? 'Connecting needs the desktop app once. With the env file as the backend the connection follows the vault when your sync carries hidden files (iCloud Drive, git and Dropbox do; Obsidian Sync skips files whose name starts with a dot). With Obsidian Sync, paste the refresh token into the settings tab on this device.'
           : "Connecting needs the desktop app, and with Obsidian's keychain as the backend the connection stays on the device where you connect. Switch to the env file in the settings to share one connection through the vault.",
-        8000
+        12000
       );
       throw new Error('connecting requires the desktop app');
     }
@@ -1631,7 +1666,7 @@ class MyicorConnectSettingTab extends PluginSettingTab {
       .setName('Keys are stored in')
       .setDesc(usable
         ? "Obsidian's keychain (Settings, General, Keychain) keeps the keys on this device, outside the vault, so each device connects on its own. "
-          + 'The env file keeps them in a file inside the vault, so one connection follows the vault to every device. '
+          + 'The env file keeps them in a file inside the vault, so one connection follows the vault to every device whose sync carries hidden files (iCloud Drive, git and Dropbox do; Obsidian Sync skips files whose name starts with a dot). '
           + 'Switching moves nothing by itself; use the Move buttons below.'
         : "Obsidian's keychain needs Obsidian 1.11.4 or newer, so on this Obsidian the env file is the only choice.")
       .addDropdown((d) => {
@@ -1649,22 +1684,36 @@ class MyicorConnectSettingTab extends PluginSettingTab {
           });
       });
 
+    /* The path is committed on a settled value only (the input's change
+       event: blur or Enter), never per keystroke: each keystroke used to
+       add a half-typed path to .gitignore and re-read the tokens from a
+       file that does not exist. A path that fails the check is refused
+       with the reason and the setting keeps its last good value. */
     new Setting(el)
       .setName('Env file')
-      .setDesc('Vault-relative path to a file of KEY=value lines; a line starting with # is a comment. Read only while the env file is the backend in use.')
+      .setDesc('Vault-relative path to a file of key=value lines; a line starting with # is a comment. Read only while the env file is the backend in use.')
       .addText((t) => {
         t.setPlaceholder(DEFAULT_ENV_FILE_PATH)
-          .setValue(plugin.data.envFilePath === DEFAULT_ENV_FILE_PATH ? '' : (plugin.data.envFilePath || ''))
-          .onChange(async (v) => {
-            plugin.data.envFilePath = v.trim() || DEFAULT_ENV_FILE_PATH;
-            await plugin.saveSettings();
-            if (backend === 'env-file') {
-              await plugin.ensureGitignore();
-              await plugin.loadTokens();
-              plugin.refreshExplorerDot();
-            }
-          });
+          .setValue(plugin.data.envFilePath === DEFAULT_ENV_FILE_PATH ? '' : (plugin.data.envFilePath || ''));
         t.inputEl.setAttribute('aria-label', 'Env file path');
+        t.inputEl.addEventListener('change', async () => {
+          const typed = String(t.inputEl.value == null ? '' : t.inputEl.value).trim();
+          const next = typed ? normalizeEnvFilePath(typed) : { ok: true, path: DEFAULT_ENV_FILE_PATH, error: '' };
+          if (!next.ok) {
+            new Notice('myICOR: ' + next.error, 8000);
+            t.setValue(plugin.data.envFilePath === DEFAULT_ENV_FILE_PATH ? '' : plugin.data.envFilePath);
+            return;
+          }
+          if (next.path === plugin.data.envFilePath) return;
+          plugin.data.envFilePath = next.path;
+          await plugin.saveSettings();
+          if (backend === 'env-file') {
+            await plugin.ensureGitignore();
+            await plugin.loadTokens();
+            plugin.refreshExplorerDot();
+          }
+          this.display();
+        });
       });
 
     const where = await plugin.secretLocations();
@@ -3088,6 +3137,6 @@ module.exports = MyicorConnectPlugin;
 Object.assign(module.exports, {
   SECRET_ID_PREFIX, SECRET_FIELDS, SECRETS_BACKENDS, DEFAULT_ENV_FILE_PATH, BACKEND_LABELS,
   secretStorageUsable, defaultSecretsBackend, effectiveSecretsBackend,
-  parseEnvFile, upsertEnvLine, splitPlaintextTokens, persistableData,
+  parseEnvFile, upsertEnvLine, normalizeEnvFilePath, splitPlaintextTokens, persistableData,
   KeychainBackend, EnvFileBackend, secretStatusText, MyicorConnectSettingTab,
 });

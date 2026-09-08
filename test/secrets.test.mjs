@@ -588,7 +588,198 @@ test('the tab: switching the dropdown moves nothing by itself and re-reads the n
   assertNoLeak(h);
 });
 
-test('the mobile Notice names the way out under the keychain and keeps the old sentence under the env file', () => {
-  assert.match(source, /Connecting needs the desktop app once\. Connect there and the connection syncs to this device with the vault\./);
+test('the mobile Notice names the way out under the keychain, and under the env file says when the file follows the vault and how to paste', () => {
+  assert.match(source, /Connecting needs the desktop app once\. With the env file as the backend the connection follows the vault when your sync carries hidden files \(iCloud Drive, git and Dropbox do; Obsidian Sync skips files whose name starts with a dot\)\. With Obsidian Sync, paste the refresh token into the settings tab on this device\./);
   assert.match(source, /with Obsidian's keychain as the backend the connection stays on the device where you connect/);
+  assert.doesNotMatch(source, /syncs to this device with the vault/);
+});
+
+/* --------------------------------------- 6. THE FIX PASS (Vex C-1 to C-4, Flint 1 and 3) -- */
+
+test('C-1: upsertEnvLine refuses a value with a line break, so an upstream string can never become a second key', () => {
+  const { M } = makePlugin();
+  /* Vex's proof string, verbatim: it used to return "A=1\nMYICOR_ACCESS_TOKEN=x\nB=1\n". */
+  assert.throws(() => M.upsertEnvLine('A=1\n', 'MYICOR_ACCESS_TOKEN', 'x\nB=1'), /line break/);
+  assert.throws(() => M.upsertEnvLine('A=1\n', 'MYICOR_ACCESS_TOKEN', 'x\rB=1'), /line break/);
+  assert.throws(() => M.upsertEnvLine('MYICOR_ACCESS_TOKEN=old\n', 'MYICOR_ACCESS_TOKEN', 'x\nB=1'), /line break/, 'the rewrite path refuses too');
+  assert.equal(M.upsertEnvLine('A=1\n', 'MYICOR_ACCESS_TOKEN', 'x'), 'A=1\nMYICOR_ACCESS_TOKEN=x\n', 'a plain value still lands');
+});
+
+test('C-1: a token with a line break from the endpoint never reaches the env file; saveTokens rejects and the file is untouched', async () => {
+  const h = makePlugin({ data: { secretsBackend: 'env-file' } });
+  const { M, plugin, adapter } = h;
+  const before = 'OTHER=1\n';
+  adapter.map.set(M.DEFAULT_ENV_FILE_PATH, before);
+  await plugin.initSecrets();
+  plugin.storeTokens({ access_token: 'x\nEVIL=1', refresh_token: 'r', expires_in: 900 });
+  await assert.rejects(plugin.saveTokens(), /line break/);
+  assert.equal(adapter.map.get(M.DEFAULT_ENV_FILE_PATH), before, 'byte-identical');
+  assert.ok(!adapter.writes.includes(M.DEFAULT_ENV_FILE_PATH), 'no write at all');
+  assertNoLeak(h, ['EVIL=1']);
+});
+
+test('C-4: blanking a key the env file never had changes nothing, and a disconnect writes nothing to such a file', async () => {
+  const h = makePlugin({ data: { secretsBackend: 'env-file' } });
+  const { M, plugin, adapter } = h;
+  /* Vex's proof string: it used to return "A=1\nMYICOR_ACCESS_TOKEN=\n". */
+  assert.equal(M.upsertEnvLine('A=1\n', 'MYICOR_ACCESS_TOKEN', ''), 'A=1\n');
+  assert.equal(M.upsertEnvLine('', 'MYICOR_ACCESS_TOKEN', ''), '');
+  assert.equal(M.upsertEnvLine('A=1\nT=secret\n', 'T', ''), 'A=1\nT=\n', 'a key the file has is still blanked in place');
+  const before = '# team keys\nOPENAI_API_KEY=sk-not-real\n';
+  adapter.map.set(M.DEFAULT_ENV_FILE_PATH, before);
+  await plugin.initSecrets();
+  const writes = adapter.writes.length;
+  await plugin.disconnect();
+  assert.equal(adapter.map.get(M.DEFAULT_ENV_FILE_PATH), before, 'no empty MYICOR_ lines appended');
+  assert.equal(adapter.writes.length, writes, 'the file was not written');
+  assertNoLeak(h);
+});
+
+test('C-4: a disconnect never creates empty keychain ids; an existing id is cleared, through deleteSecret where the API has one', async () => {
+  /* A store that never held the keys: nothing is written. */
+  const fresh = fakeSecretStorage();
+  const h1 = makePlugin({ secretStorage: fresh });
+  await h1.plugin.initSecrets();
+  await h1.plugin.disconnect();
+  assert.deepEqual(fresh.sets, [], 'no setSecret call');
+  assert.deepEqual(fresh.listSecrets(), [], 'no id created');
+
+  /* A store without deleteSecret that holds the keys: '' is the only clear. */
+  const held = fakeSecretStorage();
+  const h2 = makePlugin({ secretStorage: held });
+  const { M } = h2;
+  await h2.plugin.initSecrets();
+  h2.plugin.storeTokens({ access_token: FIX_ACCESS, refresh_token: FIX_REFRESH, expires_in: 900 });
+  await h2.plugin.saveTokens();
+  await h2.plugin.disconnect();
+  assert.equal(held.map.get(M.SECRET_FIELDS.access_token.id), '');
+  assert.equal(held.map.get(M.SECRET_FIELDS.refresh_token.id), '');
+
+  /* A store with deleteSecret: the ids go away instead. */
+  const deletable = fakeSecretStorage();
+  deletable.deleted = [];
+  deletable.deleteSecret = function (id) { this.deleted.push(id); this.map.delete(id); };
+  const h3 = makePlugin({ secretStorage: deletable });
+  await h3.plugin.initSecrets();
+  h3.plugin.storeTokens({ access_token: FIX_ACCESS, refresh_token: FIX_REFRESH, expires_in: 900 });
+  await h3.plugin.saveTokens();
+  const setsBefore = deletable.sets.length;
+  await h3.plugin.disconnect();
+  assert.deepEqual(deletable.deleted.sort(), [M.SECRET_FIELDS.access_token.id, M.SECRET_FIELDS.refresh_token.id].sort());
+  assert.deepEqual(deletable.listSecrets(), [], 'both ids gone');
+  assert.equal(deletable.sets.length, setsBefore, 'no setSecret with an empty value');
+  assert.ok(!h3.plugin.isConnected());
+  assertNoLeak(h3);
+});
+
+test('C-3: normalizeEnvFilePath keeps a vault-relative file, tidies slashes and dots, and refuses absolute, home and ..', () => {
+  const { M } = makePlugin();
+  const n = (v) => clone(M.normalizeEnvFilePath(v));
+  assert.deepEqual(n('keys/.env'), { ok: true, path: 'keys/.env', error: '' });
+  assert.deepEqual(n('  ./keys//sub/./.env  '), { ok: true, path: 'keys/sub/.env', error: '' });
+  assert.equal(n('keys\\.env').path, 'keys/.env', 'backslashes read as slashes');
+  assert.equal(n(M.DEFAULT_ENV_FILE_PATH).path, M.DEFAULT_ENV_FILE_PATH);
+  for (const bad of ['', '   ', null, undefined]) assert.equal(n(bad).ok, false, 'empty: ' + JSON.stringify(bad));
+  for (const bad of ['/etc/.env', '/Users/tom/.env', 'C:/keys/.env', 'c:\\keys\\.env', '~/.env']) {
+    const r = n(bad);
+    assert.equal(r.ok, false, bad);
+    assert.match(r.error, /relative to the vault root/);
+  }
+  for (const bad of ['../.env', 'keys/../../.env', '..', 'a/b/..']) {
+    const r = n(bad);
+    assert.equal(r.ok, false, bad);
+    assert.match(r.error, /no "\.\."/);
+  }
+  for (const bad of ['.', './', '/']) assert.equal(n(bad).ok, false, bad);
+  for (const v of ['keys/.env', '/etc/.env', '../.env', '']) assert.doesNotMatch(n(v).error, /FIX|token/i);
+});
+
+test('C-3: a stored env path that climbs out of the vault, or is absolute, is replaced by the default before anything is written', async () => {
+  for (const bad of ['../../outside/.env', '/Users/tom/outside/.env']) {
+    const h = makePlugin({ data: Object.assign({}, fixture, { secretsBackend: 'env-file', envFilePath: bad }) });
+    const { M, plugin, adapter, saves } = h;
+    await plugin.initSecrets();
+    assert.equal(plugin.envFilePath(), M.DEFAULT_ENV_FILE_PATH, bad);
+    assert.equal(plugin.data.envFilePath, M.DEFAULT_ENV_FILE_PATH, 'pinned into data.json');
+    assert.equal(saves[saves.length - 1].envFilePath, M.DEFAULT_ENV_FILE_PATH);
+    assert.deepEqual([...adapter.map.keys()].filter((k) => k !== '.gitignore'), [M.DEFAULT_ENV_FILE_PATH], 'the migration wrote the default file and nothing else');
+    assert.ok(adapter.map.get('.gitignore').split('\n').includes(M.DEFAULT_ENV_FILE_PATH));
+    assert.ok(!adapter.map.get('.gitignore').includes('outside'), 'the bad path never reached .gitignore');
+    assert.ok(plugin.isConnected());
+    assertNoLeak(h);
+    /* And the read side on its own, after load: a bad value that reaches
+       data.envFilePath by any route still resolves to the default. */
+    plugin.data.envFilePath = bad;
+    assert.equal(plugin.envFilePath(), M.DEFAULT_ENV_FILE_PATH, 'envFilePath() checks, not only initSecrets');
+    assert.equal(plugin.secretsBackendFor('env-file').path, M.DEFAULT_ENV_FILE_PATH);
+  }
+});
+
+test('C-2: typing keys/.env into the env path field touches nothing per keystroke; the settled value adds one line to .gitignore once, and a bad path is refused with the reason', async () => {
+  const h = makePlugin({ data: { secretsBackend: 'env-file' }, files: { '.gitignore': '# vault\n' } });
+  const { M, plugin, adapter, saves, notices } = h;
+  await plugin.initSecrets();
+  const giAfterLoad = adapter.map.get('.gitignore');
+  const { rows, tab } = await renderTab(h);
+  tab.display = () => {}; /* the re-render is not the subject here */
+  const field = rows.find((r) => r.name === 'Env file').texts[0];
+  assert.equal(field.change, null, 'no per-keystroke handler is wired');
+  const handlers = field.inputEl.handlers.change || [];
+  assert.equal(handlers.length, 1, 'one settled-value handler (blur or Enter)');
+  const settle = handlers[0];
+
+  const savesBefore = saves.length;
+  const writesBefore = adapter.writes.length;
+  const typed = 'keys/.env';
+  for (let i = 1; i <= typed.length; i++) {
+    field.inputEl.value = typed.slice(0, i);
+    assert.equal(adapter.map.get('.gitignore'), giAfterLoad, 'no .gitignore write while typing "' + typed.slice(0, i) + '"');
+  }
+  assert.equal(saves.length, savesBefore, 'no data.json write while typing');
+  assert.equal(adapter.writes.length, writesBefore);
+
+  await settle();
+  assert.equal(plugin.data.envFilePath, 'keys/.env');
+  assert.equal(saves[saves.length - 1].envFilePath, 'keys/.env');
+  const gi = adapter.map.get('.gitignore');
+  const lines = gi.split('\n');
+  assert.equal(lines.filter((l) => l === 'keys/.env').length, 1, 'exactly one line for the settled path');
+  assert.equal(lines.filter((l) => l.startsWith('# ICOR for Life - Connect')).length, 2, 'one block from load (the default path), one from the settled value');
+  for (const partial of ['k', 'ke', 'key', 'keys', 'keys/', 'keys/.', 'keys/.e', 'keys/.en']) assert.ok(!lines.includes(partial), 'no half-typed path: ' + partial);
+
+  /* The same value settled again (a second blur) appends nothing. */
+  await settle();
+  assert.equal(adapter.map.get('.gitignore'), gi, 'already there, not appended again');
+
+  /* A path that leaves the vault: refused with the reason, the setting keeps its last good value, the field is put back. */
+  field.inputEl.value = '../outside/.env';
+  await settle();
+  assert.equal(plugin.data.envFilePath, 'keys/.env', 'unchanged');
+  assert.equal(field.value, 'keys/.env', 'the field shows the value in force again');
+  assert.match(notices[notices.length - 1], /must stay inside the vault/);
+  assert.equal(adapter.map.get('.gitignore'), gi, 'nothing added for the refused path');
+
+  /* Clearing the field returns to the default. */
+  field.inputEl.value = '';
+  await settle();
+  assert.equal(plugin.data.envFilePath, M.DEFAULT_ENV_FILE_PATH);
+  assertNoLeak(h);
+});
+
+test('Flint 1 and 3: the tab and the README say when the env file follows the vault, and the env file description is sentence case', async () => {
+  const h = makePlugin({ secretStorage: fakeSecretStorage() });
+  await h.plugin.initSecrets();
+  const { rows } = await renderTab(h);
+  const backend = rows.find((r) => r.name === 'Keys are stored in');
+  assert.match(backend.desc, /Obsidian Sync skips files whose name starts with a dot/);
+  assert.doesNotMatch(backend.desc, /follows the vault to every device\. /, 'the unqualified promise is gone');
+  const env = rows.find((r) => r.name === 'Env file');
+  assert.doesNotMatch(env.desc, /KEY=value/);
+  assert.match(env.desc, /key=value/);
+  const readme = readFileSync(resolve(repo, 'README.md'), 'utf8');
+  assert.match(readme, /Obsidian Sync skips files whose name starts with a dot/);
+  assert.match(readme, /paste the refresh token/);
+  assert.doesNotMatch(readme, /in every backup and sync of the vault/);
+  assert.doesNotMatch(readme, /the connection follows the vault to every device;/);
+  for (const text of [backend.desc, env.desc, readme]) assert.ok(!/[–—]/.test(text), 'no em or en dash');
 });

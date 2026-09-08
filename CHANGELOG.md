@@ -18,8 +18,15 @@ Releases before 0.15.0 are described by their release notes on GitHub.
   the expiry time only.
 - The keychain is per device and Obsidian Sync does not carry it, so a
   connection made on the desktop no longer reaches a phone by itself.
-  The mobile notice says so and names the way out (the env file, or a
-  pasted refresh token).
+  The mobile notice says so and names the way out: the env file where
+  the sync carries hidden files (iCloud Drive, git and Dropbox do;
+  Obsidian Sync skips files whose name starts with a dot), or a pasted
+  refresh token.
+- The env file writer refuses a value with a line break, never appends
+  an empty `MYICOR_*=` line for a key the file does not have, and the
+  keychain is never given an empty entry on disconnect. The env file
+  path is checked (vault-relative, no `..`, no absolute path) and is
+  committed when the field settles, not per keystroke.
 
 ### Added
 - A settings tab, "Where your keys live": one dropdown, "Keys are stored

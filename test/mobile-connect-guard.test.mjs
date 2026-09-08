@@ -98,13 +98,19 @@ test('off the desktop app, doConnect rejects immediately with the member sentenc
   const { plugin, notices } = loadPlugin({ isDesktopApp: false });
   await assert.rejects(plugin.doConnect(), /connecting requires the desktop app/);
   assert.equal(notices.length, 1, `expected exactly one Notice, got ${JSON.stringify(notices)}`);
-  assert.match(notices[0], /Connecting needs the desktop app once\. Connect there and the connection syncs to this device with the vault\./);
+  /* 0.15.0, Flint's Connect review finding 1: the env file's old sentence
+     promised a sync Obsidian Sync does not do (it skips dot files, and the
+     default env file is one), so the Notice now says when the file follows
+     the vault and names the paste-by-hand route. */
+  assert.match(notices[0], /^Connecting needs the desktop app once\. With the env file as the backend the connection follows the vault when your sync carries hidden files/);
+  assert.match(notices[0], /Obsidian Sync skips files whose name starts with a dot/);
+  assert.match(notices[0], /paste the refresh token into the settings tab on this device\.$/);
   assert.ok(!plugin.authServer, 'a loopback server handle exists -- the guard let something past it before rejecting');
 });
 
-test('the mobile Notice carries no em dash or en dash', () => {
-  assert.ok(!/Connecting needs the desktop app[^]*?vault\./.test(''), 'sanity: pattern compiles');
-  const m = source.match(/'Connecting needs the desktop app once\. Connect there and the connection syncs to this device with the vault\.'/);
-  assert.ok(m, 'the exact Notice string must be present, unchanged by this fix');
+test('the mobile Notice carries no em dash or en dash, and no longer promises a sync through Obsidian Sync', () => {
+  const m = source.match(/'Connecting needs the desktop app once\. With the env file as the backend[^']*'/);
+  assert.ok(m, 'the env-file Notice string must be present');
   assert.ok(!/[–—]/.test(m[0]));
+  assert.doesNotMatch(source, /syncs to this device with the vault/, 'the old promise must be gone from the source');
 });
