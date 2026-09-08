@@ -49,3 +49,10 @@ Releases before 0.15.0 are described by their release notes on GitHub.
 ### Fixed
 - No key ever appears in a notice or in the console, not even masked; a
   gate now reads the source for that.
+- The Overview's loop percent ("Your loop is X% drawn", the gauge and
+  the rail ink) and its "Courses closed n of m" now come from the
+  server's `get_my_journey` (`loop_percent`, `courses_completed`) and
+  match the Your Loop page in the app, reported in the Connect channel
+  2026-09-08 as 15% here against 98% there. The mean of the journey
+  courses' progress stays as the fallback for a server without the
+  field, written once for both places that draw it.

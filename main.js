@@ -82,6 +82,28 @@ function kickerDate(v) {
   }
 }
 
+/* The Overview's loop percent, the app's "Your loop is X% drawn" number.
+ * The server's get_my_journey carries it as `loop_percent` since 2026-09-09;
+ * the mean of the journey courses' progress_percent is the fallback for a
+ * server that has not shipped the field. One formula for every call site:
+ * the hero heading, the gauge label and the rail ink read this. */
+function loopPercent(journey, journeyCourses) {
+  const v = journey && journey.loop_percent;
+  if (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100) return Math.round(v);
+  const list = journeyCourses || [];
+  return list.length
+    ? Math.round(list.reduce((a, c) => a + (c.progress_percent || 0), 0) / list.length)
+    : 0;
+}
+
+/* "COURSES CLOSED n OF m": n from the server's `courses_completed` when it
+ * is a whole number, else the count of journey courses at 100. */
+function coursesClosed(journey, journeyCourses) {
+  const v = journey && journey.courses_completed;
+  if (Number.isInteger(v) && v >= 0) return v;
+  return (journeyCourses || []).filter((c) => c.progress_percent >= 100).length;
+}
+
 const JOURNEY_STAGES = [
   { key: 'getting_started', label: 'Getting Started' },
   { key: 'level_1', label: 'Level 1' },
@@ -1971,10 +1993,8 @@ class DashboardView extends ItemView {
     const isJourney = (c) => c.course_type === 'icor_journey';
     const journeyCourses = all.filter(isJourney);
     const otherCourses = all.filter((c) => !isJourney(c));
-    const inkPct = journeyCourses.length
-      ? Math.round(journeyCourses.reduce((a, c) => a + (c.progress_percent || 0), 0) / journeyCourses.length)
-      : 0;
-    const closed = journeyCourses.filter((c) => c.progress_percent >= 100).length;
+    const inkPct = loopPercent(journey, journeyCourses);
+    const closed = coursesClosed(journey, journeyCourses);
     const currentCourse = journeyCourses.find((c) => c.progress_percent < 100) || null;
 
     if (this.sectionIO) this.sectionIO.disconnect();
@@ -1986,7 +2006,7 @@ class DashboardView extends ItemView {
     const reveal = (el) => { this.sectionIO.observe(el); return el; };
 
     this.renderLoopHero(body, { journey, inkPct, closed, journeyCourses, currentCourse });
-    this.renderLoopPath(reveal(body.createDiv({ cls: 'micor-sect' })), journeyCourses, currentCourse);
+    this.renderLoopPath(reveal(body.createDiv({ cls: 'micor-sect' })), journeyCourses, currentCourse, inkPct);
     if (otherCourses.length) this.renderOffTheLine(reveal(body.createDiv({ cls: 'micor-sect' })), otherCourses, courses.summary);
     this.renderLoopSlabs(reveal(body.createDiv({ cls: 'micor-sect' })), { growth, byCategory, journeyCourses });
     this.renderGapRows(reveal(body.createDiv({ cls: 'micor-sect' })), growth, byCategory);
@@ -2180,14 +2200,13 @@ class DashboardView extends ItemView {
 
   /* ------------------------------------------------------- the path ----- */
 
-  renderLoopPath(sec, journeyCourses, currentCourse) {
+  renderLoopPath(sec, journeyCourses, currentCourse, inkPct) {
     this.sectHead(sec, 'THE PATH · ' + (journeyCourses.length || 'FIVE') + ' STATIONS', 'One line through five courses.',
       'The ink runs exactly as far as you have. The dot that is lit is your next lesson.');
     if (!journeyCourses.length) {
       this.emptyState(sec, 'map', 'Journey courses appear once the library loads.');
       return;
     }
-    const inkPct = Math.round(journeyCourses.reduce((a, c) => a + (c.progress_percent || 0), 0) / journeyCourses.length);
     const path = sec.createDiv({ cls: 'micor-path' });
     const rail = path.createDiv({ cls: 'micor-rail' });
     const railInk = rail.createDiv({ cls: 'micor-rail-ink' });
@@ -3139,4 +3158,7 @@ Object.assign(module.exports, {
   secretStorageUsable, defaultSecretsBackend, effectiveSecretsBackend,
   parseEnvFile, upsertEnvLine, normalizeEnvFilePath, splitPlaintextTokens, persistableData,
   KeychainBackend, EnvFileBackend, secretStatusText, MyicorConnectSettingTab,
+  /* The Overview's numbers and the view that renders them, exported for
+     test/loop-percent.test.mjs. */
+  loopPercent, coursesClosed, DashboardView,
 });

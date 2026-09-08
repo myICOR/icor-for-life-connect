@@ -23,6 +23,24 @@ class FakeEl {
     this.dataset = Object.create(null);
     this.textContent = '';
     this.innerHTML = '';
+    /* Inline styles land here as plain properties (`el.style.height`);
+       the loop gate reads the rail ink's height back off it. */
+    this.style = Object.create(null);
+  }
+  /* Obsidian's HTMLElement helpers, the ones the Overview path calls.
+     Added 2026-09-09 for the loop gate; a gate that renders a whole page
+     needs the same surface the plugin uses on the real element. */
+  setText(t) { this.textContent = String(t); }
+  appendText(t) { this.textContent += String(t); }
+  setAttr(k, v) { this.attrs[k] = String(v); }
+  removeAttribute(k) { delete this.attrs[k]; }
+  removeClass(...c) { for (const x of c) this.classSet.delete(x); }
+  hasClass(c) { return this.classSet.has(c); }
+  toggleClass(c, force) { return this.classList.toggle(c, force); }
+  hasChildNodes() { return this.children.length > 0; }
+  empty() {
+    for (const child of this.children) child.parentElement = null;
+    this.children = [];
   }
   get classList() {
     const s = this.classSet;
