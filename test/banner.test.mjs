@@ -69,6 +69,10 @@ function loadPlugin({ themePaints = true } = {}) {
     requestUrl: async () => { throw new Error('no network in this gate'); },
     setIcon: (el, icon) => { el.attrs['data-icon'] = icon; },
     Platform: { isDesktopApp: true, isMobileApp: false },
+    /* 0.15.0: main.js declares a settings tab, which extends this at
+       module load; a stub keeps this gate about its own subject. */
+    PluginSettingTab: class { constructor(app, plugin) { this.app = app; this.plugin = plugin; } },
+    Setting: class {},
   };
 
   const sandbox = {

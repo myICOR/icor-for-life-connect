@@ -2,8 +2,10 @@
 
 Your app.myicor.com account, inside your vault. Connect once on the
 desktop and your ICOR Journey, your Growth Assignments, your courses and
-the Inner Circle knowledge base sit next to your notes on every device
-your vault syncs to, instead of behind a browser tab.
+the Inner Circle knowledge base sit next to your notes, instead of behind
+a browser tab. Where the keys of that connection live, and whether one
+connection follows the vault to every device, is one setting; see "Where
+your keys live" below.
 
 **Beta release.** This plugin works and is in daily use in a real vault,
 but you will find rough edges. If something looks off, open an issue on
@@ -77,14 +79,55 @@ and it follows the vault everywhere.
   No telemetry, no other endpoints. When not connected, the plugin makes
   no network requests.
 
+## Where your keys live
+
+Connect holds two keys for your account, the OAuth access token and the
+refresh token. Where they live is one setting, "Keys are stored in", in
+the plugin's settings tab:
+
+- **Obsidian's keychain** (Settings, General, Keychain): the default on
+  Obsidian 1.11.4 and newer. The keys stay on this device, outside the
+  vault, encrypted by Obsidian; Obsidian Sync does not carry them and no
+  sync tool sees them, so every device connects on its own. On a Linux
+  desktop without a wallet Obsidian keeps them in plain text and says so
+  itself. The keychain is shared by every plugin, which is why Connect's
+  entries carry its name: `icor-for-life-connect-access-token` and
+  `icor-for-life-connect-refresh-token`.
+- **An env file in the vault**: the only choice on older Obsidian, and
+  the choice when one connection should follow the vault to every device.
+  The keys are two `KEY=value` lines, `MYICOR_ACCESS_TOKEN` and
+  `MYICOR_REFRESH_TOKEN`, in the file named by the "Env file" setting
+  (default `06 AI Team/AI Team Knowledge/.env`, vault-relative). The
+  plugin reads plain `KEY=value` lines and `#` comments, no quotes, no
+  interpolation, first occurrence of a key wins. When it writes, it
+  changes or appends those two lines and leaves every other byte of the
+  file alone. The file rides with the vault, so it is in every backup and
+  sync of the vault; the plugin adds its path to the vault's `.gitignore`
+  the way it always did for `data.json`.
+
+`data.json` keeps only the scope and the expiry time, never a key. A vault
+that connected with an older Connect has its keys moved out of `data.json`
+into the chosen backend the first time this version loads, once, and never
+back. Switching the setting moves nothing by itself: the settings tab shows
+for each key where a value exists and offers "Move to ..." when it sits in
+the other backend. Only the selected backend is read at runtime; a key
+that sits in the other one counts as not set, on purpose, so a wrong
+setting shows up instead of hiding behind a working login.
+
+The two fields in the settings tab also take a key pasted by hand, for
+carrying a connection to a device that cannot run the browser sign-in.
+The field is cleared as soon as the key is saved, and no key ever appears
+in a notice or a log.
+
 ## Security
 
-- Tokens live only in this plugin's `data.json`. Two independent guards keep
-  it out of git: the line in the repo's `.gitignore`, and the plugin itself
-  re-asserting that line on every load before a token can ever be saved.
+- Keys live only in the selected backend (see "Where your keys live");
+  `data.json` never holds one. Two independent guards keep `data.json` and
+  the env file out of git: the lines in the vault's `.gitignore`, and the
+  plugin re-asserting them on every load before a key can ever be saved.
 - `.mcp.json` receives the server URL only. Claude runs its own OAuth.
 - Access tokens expire after 15 minutes; the plugin refreshes silently with
-  rotating refresh tokens. Disconnect drops all tokens on the spot.
+  rotating refresh tokens. Disconnect drops both keys on the spot.
 
 ## No build step
 
@@ -108,8 +151,11 @@ connect.
 
 The dashboards, search and courses work on phone and tablet. The one-time
 OAuth connect needs the desktop app (the browser callback lands on a local
-loopback server); once connected there, the connection syncs to every
-device with the vault.
+loopback server). Whether that one connect reaches your phone depends on
+where the keys live: with the env file, the connection follows the vault to
+every device; with Obsidian's keychain, each device keeps its own keys and
+Obsidian Sync does not carry them, so a phone is connected by pasting the
+refresh token into its settings tab, or by switching to the env file.
 
 ## Releasing
 

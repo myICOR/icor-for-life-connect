@@ -13,16 +13,20 @@
  *      gain myICOR context (search, lessons, resources) via the same server.
  *
  * Security invariants (scaffold hard rule 9):
- *   - Tokens live ONLY in this plugin's data.json, which the plugin forces
- *     into .gitignore before ever saving a token.
- *   - .mcp.json receives the server URL only — never a token. Claude runs its
+ *   - Tokens live ONLY in the selected backend: Obsidian's keychain
+ *     (app.secretStorage, per device, outside the vault) or an env file in
+ *     the vault. data.json keeps scope and expiry, never a token, and both
+ *     data.json and the env file are forced into .gitignore before a token
+ *     can ever be saved. See "Where the keys live" below.
+ *   - .mcp.json receives the server URL only, never a token. Claude runs its
  *     own OAuth for that connection.
- *   - No secret is ever written into notes, session logs, or console output.
+ *   - No secret is ever written into notes, session logs, a Notice, or
+ *     console output, not even masked.
  */
 
 'use strict';
 
-const { Plugin, ItemView, Notice, requestUrl, setIcon, Platform } = require('obsidian');
+const { Plugin, ItemView, Notice, requestUrl, setIcon, Platform, PluginSettingTab, Setting } = require('obsidian');
 
 const BASE_URL = 'https://app.myicor.com';
 /* The public landing page, which is NOT the member app: the banner is the one
@@ -232,17 +236,239 @@ function callbackHtml(ok, detail) {
 }
 
 /* ------------------------------------------------------------------------- *
+ * Where the keys live (0.15.0)
+ *
+ * The two OAuth tokens used to sit in plain text in this plugin's data.json.
+ * They now live in ONE of two backends, chosen by the `secretsBackend`
+ * setting, and data.json keeps only what is not secret (scope, expiry):
+ *
+ *   'secret-storage'  Obsidian's keychain (Settings, General, Keychain): the
+ *                     `app.secretStorage` API of Obsidian 1.11.4 and newer,
+ *                     three synchronous methods (setSecret, getSecret,
+ *                     listSecrets), ids lowercase alphanumeric with dashes.
+ *                     Per device and outside the vault: a key entered on the
+ *                     Mac is not on the iPad, and Obsidian Sync does not
+ *                     carry it. The store is shared by every plugin, which
+ *                     is why every id carries this plugin's prefix.
+ *   'env-file'        KEY=value lines in a file inside the vault, default
+ *                     `06 AI Team/AI Team Knowledge/.env`. Rides with the
+ *                     vault, so it syncs; the plugin adds the path to
+ *                     .gitignore the way it always did for data.json.
+ *
+ * The default is the keychain when the API exists, else the env file, and
+ * the choice is written to data.json the first time this build loads, so a
+ * later Obsidian update never flips the backend under a live connection.
+ * At runtime the plugin reads the SELECTED backend only: a silent fallback
+ * to the other one would hide a misconfiguration behind a working login.
+ * The plaintext tokens of an older data.json are moved into the selected
+ * backend once, on load, and the fields blanked; nothing ever moves back
+ * into data.json. Switching the dropdown moves nothing by itself; the
+ * settings tab shows where each key is and offers a "Move to ..." button.
+ *
+ * `parseEnvFile` and `upsertEnvLine` are pure (gated by test/secrets.test.mjs):
+ * the writer rewrites exactly one line, or appends one, and leaves every
+ * other byte of the file as it was, comments included. A key that appears
+ * twice is read from and written to its FIRST line, so reader and writer
+ * agree. Values are taken literally: no quotes are stripped, nothing is
+ * interpolated. Blanking a key writes `KEY=` rather than deleting the line.
+ * ------------------------------------------------------------------------- */
+
+const SECRET_ID_PREFIX = 'icor-for-life-connect-';
+const SECRET_FIELDS = {
+  access_token: { id: SECRET_ID_PREFIX + 'access-token', env: 'MYICOR_ACCESS_TOKEN', label: 'Access token' },
+  refresh_token: { id: SECRET_ID_PREFIX + 'refresh-token', env: 'MYICOR_REFRESH_TOKEN', label: 'Refresh token' },
+};
+const SECRET_FIELD_NAMES = Object.keys(SECRET_FIELDS);
+const SECRETS_BACKENDS = ['secret-storage', 'env-file'];
+const DEFAULT_ENV_FILE_PATH = '06 AI Team/AI Team Knowledge/.env';
+const BACKEND_LABELS = {
+  'secret-storage': "Obsidian's keychain",
+  'env-file': 'the env file',
+};
+
+/* Feature detection: the two methods this layer calls, and nothing else. */
+function secretStorageUsable(storage) {
+  return !!(storage && typeof storage.getSecret === 'function' && typeof storage.setSecret === 'function');
+}
+
+function defaultSecretsBackend(app) {
+  return secretStorageUsable(app && app.secretStorage) ? 'secret-storage' : 'env-file';
+}
+
+/* The backend that is in use: the choice when it is valid and usable here.
+   'secret-storage' on an Obsidian without the API resolves to 'env-file',
+   the only choice there. */
+function effectiveSecretsBackend(choice, app) {
+  if (choice === 'secret-storage' && secretStorageUsable(app && app.secretStorage)) return 'secret-storage';
+  return 'env-file';
+}
+
+function envLineEnding(text) {
+  return text.indexOf('\r\n') >= 0 ? '\r\n' : '\n';
+}
+
+/* One line of an env file: { key, value } or null for a blank line, a
+   comment, a line without `=`, or a key outside the shell alphabet. */
+function parseEnvLine(line) {
+  const raw = line.endsWith('\r') ? line.slice(0, -1) : line;
+  if (!raw.trim() || raw.trimStart().startsWith('#')) return null;
+  const eq = raw.indexOf('=');
+  if (eq < 0) return null;
+  const key = raw.slice(0, eq).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return null;
+  return { key, value: raw.slice(eq + 1).trim() };
+}
+
+/** KEY=value lines to a plain object. The first occurrence of a key wins. */
+function parseEnvFile(text) {
+  const out = Object.create(null);
+  for (const line of String(text || '').split('\n')) {
+    const kv = parseEnvLine(line);
+    if (kv && !(kv.key in out)) out[kv.key] = kv.value;
+  }
+  return out;
+}
+
+/** The text with KEY set to value: the first KEY= line rewritten in place,
+ *  or one line appended (after a line ending when the file has none at its
+ *  end). Every other byte stays. Applying it twice gives the same text. */
+function upsertEnvLine(text, key, value) {
+  const src = String(text || '');
+  const v = String(value == null ? '' : value);
+  const lines = src.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const kv = parseEnvLine(lines[i]);
+    if (!kv || kv.key !== key) continue;
+    const cr = lines[i].endsWith('\r') ? '\r' : '';
+    lines[i] = key + '=' + v + cr;
+    return lines.join('\n');
+  }
+  const eol = envLineEnding(src);
+  if (src === '') return key + '=' + v + eol;
+  return src + (src.endsWith('\n') ? '' : eol) + key + '=' + v + eol;
+}
+
+/* An older data.json's `tokens` split into what stays (scope, expiry) and
+   what moves out (the two tokens). null when there is nothing to move. */
+function splitPlaintextTokens(tokens) {
+  if (!tokens || typeof tokens !== 'object') return null;
+  const secrets = {};
+  let any = false;
+  for (const f of SECRET_FIELD_NAMES) {
+    const v = typeof tokens[f] === 'string' ? tokens[f].trim() : '';
+    if (!v) continue;
+    secrets[f] = v;
+    any = true;
+  }
+  if (!any) return null;
+  const meta = {};
+  for (const k of Object.keys(tokens)) if (!SECRET_FIELDS[k]) meta[k] = tokens[k];
+  return { meta, secrets };
+}
+
+/* What data.json may receive: the data with the secret fields stripped out
+   of `tokens`. saveSettings writes through here and nothing else, so a
+   token cannot reach the file even if a caller left one in `data.tokens`. */
+function persistableData(data) {
+  const out = Object.assign({}, data || {});
+  if (out.tokens && typeof out.tokens === 'object') {
+    const meta = {};
+    for (const k of Object.keys(out.tokens)) if (!SECRET_FIELDS[k]) meta[k] = out.tokens[k];
+    out.tokens = meta;
+  }
+  return out;
+}
+
+/* Both backends read the two token fields as one object ('' for a field
+   that is not set) and write any subset of them ('' blanks). Neither logs. */
+class KeychainBackend {
+  constructor(storage) {
+    if (!secretStorageUsable(storage)) throw new Error("Obsidian's keychain needs Obsidian 1.11.4 or newer");
+    this.storage = storage;
+  }
+  get name() { return 'secret-storage'; }
+  async read() {
+    const out = {};
+    for (const f of SECRET_FIELD_NAMES) {
+      let v = null;
+      try { v = this.storage.getSecret(SECRET_FIELDS[f].id); } catch (e) { v = null; }
+      out[f] = typeof v === 'string' ? v.trim() : '';
+    }
+    return out;
+  }
+  /* setSecret throws on a bad id and never carries a value in the message.
+     Writing '' is the API's only way to clear an entry (no delete). */
+  async write(values) {
+    for (const f of SECRET_FIELD_NAMES) {
+      if (!(f in values)) continue;
+      this.storage.setSecret(SECRET_FIELDS[f].id, String(values[f] == null ? '' : values[f]).trim());
+    }
+  }
+}
+
+class EnvFileBackend {
+  constructor(adapter, path) {
+    this.adapter = adapter;
+    this.path = path;
+  }
+  get name() { return 'env-file'; }
+  async readText() {
+    if (!this.path || !(await this.adapter.exists(this.path))) return null;
+    return await this.adapter.read(this.path);
+  }
+  async read() {
+    const env = parseEnvFile((await this.readText()) || '');
+    const out = {};
+    for (const f of SECRET_FIELD_NAMES) out[f] = env[SECRET_FIELDS[f].env] || '';
+    return out;
+  }
+  async write(values) {
+    if (!this.path) throw new Error('no env file path is set');
+    const current = await this.readText();
+    let text = current || '';
+    let any = false;
+    for (const f of SECRET_FIELD_NAMES) {
+      if (!(f in values)) continue;
+      const v = String(values[f] == null ? '' : values[f]).trim();
+      if (v) any = true;
+      text = upsertEnvLine(text, SECRET_FIELDS[f].env, v);
+    }
+    /* Blanking keys in a file that does not exist creates nothing. */
+    if (current == null && !any) return;
+    if (text !== current) await this.adapter.write(this.path, text);
+  }
+}
+
+/* The settings tab's one line per key: where a value exists, and which of
+   those places is the one in use. Never the value. */
+function secretStatusText(where, backend) {
+  const places = [];
+  if (where['secret-storage']) places.push("Obsidian's keychain");
+  if (where['env-file']) places.push('the env file');
+  if (where['data-json']) places.push('data.json in plain text (it will move on the next load)');
+  const inUse = where[backend] ? '' : ' Not set in ' + BACKEND_LABELS[backend] + ', which is the backend in use.';
+  if (!places.length) return 'Not set.';
+  return 'Stored in ' + places.join(' and ') + '.' + inUse;
+}
+
+/* ------------------------------------------------------------------------- *
  * Plugin
  * ------------------------------------------------------------------------- */
 
 class MyicorConnectPlugin extends Plugin {
   async onload() {
     this.instanceId = Math.floor(performance.now());
-    this.data = Object.assign({ clientId: null, tokens: null }, (await this.loadData()) || {});
+    this.data = Object.assign(
+      { clientId: null, tokens: null, secretsBackend: null, envFilePath: DEFAULT_ENV_FILE_PATH },
+      (await this.loadData()) || {}
+    );
+    this.tokens = null;
     this.authInFlight = null;
 
-    /* Never let the token store reach git — enforced before any token exists. */
-    await this.ensureGitignore();
+    /* Pins the backend, guards .gitignore, moves an older build's plaintext
+       tokens out of data.json, and fills this.tokens from the backend. */
+    await this.initSecrets();
+    this.addSettingTab(new MyicorConnectSettingTab(this.app, this));
 
     this.registerView(VIEW_TYPE, (leaf) => new DashboardView(leaf, this));
     this.registerView(ROOM_VIEW_TYPE, (leaf) => new RoomDashboardView(leaf, this));
@@ -448,7 +674,146 @@ class MyicorConnectPlugin extends Plugin {
   }
 
   async saveSettings() {
-    await this.saveData(this.data);
+    /* The strip is the guard that keeps a token out of data.json. The one
+       state it must not run in: an older build's tokens that the backend
+       refused to take on load. Stripping them would lose the connection
+       instead of moving it, so they stay, the Notice said so, and the next
+       load tries again. */
+    await this.saveData(this.secretsUnmoved ? this.data : persistableData(this.data));
+  }
+
+  /* --------------------------------------------------- where the keys live */
+
+  /* What the setting says, defaulted; and what is actually in use here. */
+  secretsBackendChoice() {
+    return SECRETS_BACKENDS.includes(this.data.secretsBackend) ? this.data.secretsBackend : defaultSecretsBackend(this.app);
+  }
+  secretsBackend() {
+    return effectiveSecretsBackend(this.secretsBackendChoice(), this.app);
+  }
+  envFilePath() {
+    const p = typeof this.data.envFilePath === 'string' ? this.data.envFilePath.trim() : '';
+    return p || DEFAULT_ENV_FILE_PATH;
+  }
+  secretsBackendFor(name) {
+    if (name === 'secret-storage') return new KeychainBackend(this.app.secretStorage);
+    return new EnvFileBackend(this.app.vault.adapter, this.envFilePath());
+  }
+  secretsStore() {
+    return this.secretsBackendFor(this.secretsBackend());
+  }
+
+  /* Runs once per load, after loadData and before anything reads a token.
+     Order matters: the choice is pinned first so the .gitignore guard knows
+     which file to cover, the guard runs before the migration can write a
+     token anywhere, and the in-memory tokens are read last, from the
+     backend that is in use and nowhere else. */
+  async initSecrets() {
+    let changed = false;
+    if (!SECRETS_BACKENDS.includes(this.data.secretsBackend)) {
+      this.data.secretsBackend = defaultSecretsBackend(this.app);
+      changed = true;
+    }
+    if (typeof this.data.envFilePath !== 'string' || !this.data.envFilePath.trim()) {
+      this.data.envFilePath = DEFAULT_ENV_FILE_PATH;
+      changed = true;
+    }
+    await this.ensureGitignore();
+    const plain = splitPlaintextTokens(this.data.tokens);
+    this.secretsUnmoved = false;
+    if (plain) {
+      try {
+        await this.secretsStore().write(plain.secrets);
+        this.data.tokens = plain.meta;
+        changed = true;
+      } catch (e) {
+        this.secretsUnmoved = true;
+        /* The backend refused, so the tokens stay where they were until it
+           accepts them; blanking first would lose the connection. The
+           sentence names the backend, never a value. */
+        new Notice('myICOR: could not move the keys into ' + BACKEND_LABELS[this.secretsBackend()] + '. They stay in data.json until the next load.', 12000);
+      }
+    }
+    if (changed) await this.saveSettings();
+    await this.loadTokens();
+  }
+
+  /* this.tokens from the selected backend plus data.json's scope and expiry.
+     No refresh token, no connection: an access token alone cannot renew. */
+  async loadTokens() {
+    const meta = this.data.tokens && typeof this.data.tokens === 'object' ? this.data.tokens : {};
+    let secrets = null;
+    try { secrets = await this.secretsStore().read(); } catch (e) { secrets = null; }
+    if (!secrets || !secrets.refresh_token) {
+      this.tokens = null;
+      return;
+    }
+    this.tokens = {
+      access_token: secrets.access_token || '',
+      refresh_token: secrets.refresh_token,
+      scope: meta.scope || OAUTH_SCOPE,
+      expires_at: Number(meta.expires_at) || 0,
+    };
+  }
+
+  /* Persist the in-memory tokens: the two secrets to the backend, the rest
+     to data.json. The only writer of a token after load. */
+  async saveTokens() {
+    const t = this.tokens;
+    await this.secretsStore().write({
+      access_token: t ? t.access_token : '',
+      refresh_token: t ? t.refresh_token : '',
+    });
+    this.data.tokens = t ? { scope: t.scope, expires_at: t.expires_at } : null;
+    await this.saveSettings();
+  }
+
+  /* A key pasted into the settings tab. The expiry is reset so the first
+     call refreshes, which is also what proves a pasted refresh token. */
+  async setSecretByHand(field, value) {
+    const v = String(value == null ? '' : value).trim();
+    if (!SECRET_FIELDS[field] || !v) return false;
+    await this.secretsStore().write({ [field]: v });
+    this.data.tokens = { scope: OAUTH_SCOPE, expires_at: 0 };
+    await this.saveSettings();
+    await this.loadTokens();
+    this.refreshExplorerDot();
+    return true;
+  }
+
+  /* Copy one key into `to`, then blank it where it came from. The copy
+     lands first, so a refusal on either side never loses the key. */
+  async moveSecret(field, to) {
+    if (!SECRET_FIELDS[field] || !SECRETS_BACKENDS.includes(to)) return false;
+    const from = to === 'secret-storage' ? 'env-file' : 'secret-storage';
+    const src = this.secretsBackendFor(from);
+    const dst = this.secretsBackendFor(to);
+    const v = (await src.read())[field];
+    if (!v) return false;
+    await dst.write({ [field]: v });
+    await src.write({ [field]: '' });
+    await this.loadTokens();
+    this.refreshExplorerDot();
+    return true;
+  }
+
+  /* For each key: in which places a value exists. Presence only. */
+  async secretLocations() {
+    const read = async (name) => {
+      try { return await this.secretsBackendFor(name).read(); } catch (e) { return null; }
+    };
+    const inStore = await read('secret-storage');
+    const inEnv = await read('env-file');
+    const plain = splitPlaintextTokens(this.data.tokens);
+    const out = {};
+    for (const f of SECRET_FIELD_NAMES) {
+      out[f] = {
+        'secret-storage': !!(inStore && inStore[f]),
+        'env-file': !!(inEnv && inEnv[f]),
+        'data-json': !!(plain && plain.secrets[f]),
+      };
+    }
+    return out;
   }
 
   /* ---------------------------------------------------------------- views */
@@ -802,7 +1167,7 @@ class MyicorConnectPlugin extends Plugin {
   /* ------------------------------------------------------------- oauth --- */
 
   isConnected() {
-    return !!(this.data.tokens && this.data.tokens.refresh_token);
+    return !!(this.tokens && this.tokens.refresh_token);
   }
 
   closeAuthServer() {
@@ -830,16 +1195,22 @@ class MyicorConnectPlugin extends Plugin {
 
   async doConnect() {
     /* The loopback callback server and PKCE need node http/crypto, which the
-     * mobile webview does not have. The token itself syncs with the vault
-     * (data.json rides iCloud/Obsidian Sync), so one desktop connect covers
-     * every device.
+     * mobile webview does not have. Whether one desktop connect covers every
+     * device depends on where the keys live: the env file rides with the
+     * vault, Obsidian's keychain stays on the device it was written on, so
+     * the sentence names the way out rather than promising a sync.
      *
      * The check is the first statement, before any require: that is the
      * guard shape the community directory's scanner recognises for a plugin
      * that keeps isDesktopOnly false (same shape as Planner's imapConnect).
      * A try/catch around the require does not read as a guard to it. */
     if (!Platform.isDesktopApp) {
-      new Notice('Connecting needs the desktop app once. Connect there and the connection syncs to this device with the vault.', 8000);
+      new Notice(
+        this.secretsBackend() === 'env-file'
+          ? 'Connecting needs the desktop app once. Connect there and the connection syncs to this device with the vault.'
+          : "Connecting needs the desktop app, and with Obsidian's keychain as the backend the connection stays on the device where you connect. Switch to the env file in the settings to share one connection through the vault.",
+        8000
+      );
       throw new Error('connecting requires the desktop app');
     }
     const http = require('http');
@@ -935,7 +1306,7 @@ class MyicorConnectPlugin extends Plugin {
       throw new Error('token exchange failed (HTTP ' + tok.status + ')');
     }
     this.storeTokens(tok.json);
-    await this.saveSettings();
+    await this.saveTokens();
 
     /* Give the Claude sessions in this vault the same context. */
     await this.wireClaude();
@@ -944,8 +1315,9 @@ class MyicorConnectPlugin extends Plugin {
     new Notice('myICOR: connected.');
   }
 
+  /* In memory only; saveTokens persists. */
   storeTokens(body) {
-    this.data.tokens = {
+    this.tokens = {
       access_token: body.access_token,
       refresh_token: body.refresh_token,
       scope: body.scope || OAUTH_SCOPE,
@@ -955,8 +1327,8 @@ class MyicorConnectPlugin extends Plugin {
   }
 
   async ensureToken() {
-    if (!this.data.tokens) throw new Error('not connected');
-    if (Date.now() < this.data.tokens.expires_at) return this.data.tokens.access_token;
+    if (!this.tokens) throw new Error('not connected');
+    if (this.tokens.access_token && Date.now() < this.tokens.expires_at) return this.tokens.access_token;
 
     const resp = await requestUrl({
       url: TOKEN_URL,
@@ -964,25 +1336,25 @@ class MyicorConnectPlugin extends Plugin {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         grant_type: 'refresh_token',
-        refresh_token: this.data.tokens.refresh_token,
+        refresh_token: this.tokens.refresh_token,
       }),
       throw: false,
     });
     if (resp.status !== 200 || !resp.json.access_token) {
       /* Refresh token revoked or expired: drop to disconnected cleanly. */
-      this.data.tokens = null;
-      await this.saveSettings();
+      this.tokens = null;
+      await this.saveTokens();
       this.refreshExplorerDot();
-      throw new Error('session expired — please reconnect');
+      throw new Error('session expired, please reconnect');
     }
     this.storeTokens(resp.json); /* rotation: the refresh token is replaced */
-    await this.saveSettings();
-    return this.data.tokens.access_token;
+    await this.saveTokens();
+    return this.tokens.access_token;
   }
 
   async disconnect() {
-    this.data.tokens = null;
-    await this.saveSettings();
+    this.tokens = null;
+    await this.saveTokens();
     this.refreshExplorerDot();
     new Notice('myICOR: disconnected. Your account is untouched; this vault just forgot its keys.');
   }
@@ -1203,19 +1575,139 @@ class MyicorConnectPlugin extends Plugin {
 
   async ensureGitignore() {
     const adapter = this.app.vault.adapter;
-    /* The ignored path is read from the host at call time, never written
-       down: the plugin's folder FOLLOWS the manifest id, and the config
-       dir itself can be renamed in Obsidian's settings. A literal here
-       survives a rename of either and then guards the wrong path. */
-    const line = this.app.vault.configDir + '/plugins/' + this.manifest.id + '/data.json';
+    /* The ignored paths are read from the host at call time, never written
+       down: the plugin's folder FOLLOWS the manifest id, the config dir
+       itself can be renamed in Obsidian's settings, and the env file is a
+       setting. A literal here survives a rename of any of them and then
+       guards the wrong path. The env file is covered only while it is the
+       backend in use; data.json always, for the builds before 0.15.0 that
+       wrote tokens into it. */
+    const lines = [this.app.vault.configDir + '/plugins/' + this.manifest.id + '/data.json'];
+    if (this.secretsBackend() === 'env-file') lines.push(this.envFilePath());
     let gi = '';
     if (await adapter.exists('.gitignore')) gi = await adapter.read('.gitignore');
-    if (gi.split('\n').some((l) => l.trim() === line)) return;
+    const have = new Set(gi.split('\n').map((l) => l.trim()));
+    const missing = lines.filter((l) => !have.has(l));
+    if (!missing.length) return;
     const sep = gi === '' || gi.endsWith('\n') ? '' : '\n';
     await adapter.write(
       '.gitignore',
-      gi + sep + '\n# ICOR for Life - Connect token store (hard rule 9: secrets never reach git)\n' + line + '\n'
+      gi + sep + '\n# ICOR for Life - Connect token store (hard rule 9: secrets never reach git)\n' + missing.join('\n') + '\n'
     );
+  }
+}
+
+/* ------------------------------------------------------------------------- *
+ * Settings tab: where the keys live. Headings are sentence case and carry
+ * neither the plugin name nor the word "settings" (directory scanner rules
+ * settings-tab/no-manual-html-headings, no-problematic-settings-headings).
+ * Inputs are password fields with autocomplete off, cleared after Save. No
+ * value reaches a Notice, and the status line reports presence only.
+ * ------------------------------------------------------------------------- */
+
+class MyicorConnectSettingTab extends PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    this.render(containerEl).catch(() => {
+      new Setting(containerEl).setName('Where your keys live').setDesc('The settings could not be read. Close and reopen this tab.');
+    });
+  }
+
+  async render(el) {
+    const plugin = this.plugin;
+    const usable = secretStorageUsable(this.app.secretStorage);
+    const backend = plugin.secretsBackend();
+    const other = backend === 'secret-storage' ? 'env-file' : 'secret-storage';
+
+    new Setting(el).setName('Where your keys live').setHeading();
+
+    new Setting(el)
+      .setName('Keys are stored in')
+      .setDesc(usable
+        ? "Obsidian's keychain (Settings, General, Keychain) keeps the keys on this device, outside the vault, so each device connects on its own. "
+          + 'The env file keeps them in a file inside the vault, so one connection follows the vault to every device. '
+          + 'Switching moves nothing by itself; use the Move buttons below.'
+        : "Obsidian's keychain needs Obsidian 1.11.4 or newer, so on this Obsidian the env file is the only choice.")
+      .addDropdown((d) => {
+        d.addOption('secret-storage', "Obsidian's keychain")
+          .addOption('env-file', 'An env file in the vault')
+          .setValue(usable ? plugin.secretsBackendChoice() : 'env-file')
+          .setDisabled(!usable)
+          .onChange(async (v) => {
+            plugin.data.secretsBackend = SECRETS_BACKENDS.includes(v) ? v : defaultSecretsBackend(this.app);
+            await plugin.saveSettings();
+            await plugin.ensureGitignore();
+            await plugin.loadTokens();
+            plugin.refreshExplorerDot();
+            this.display();
+          });
+      });
+
+    new Setting(el)
+      .setName('Env file')
+      .setDesc('Vault-relative path to a file of KEY=value lines; a line starting with # is a comment. Read only while the env file is the backend in use.')
+      .addText((t) => {
+        t.setPlaceholder(DEFAULT_ENV_FILE_PATH)
+          .setValue(plugin.data.envFilePath === DEFAULT_ENV_FILE_PATH ? '' : (plugin.data.envFilePath || ''))
+          .onChange(async (v) => {
+            plugin.data.envFilePath = v.trim() || DEFAULT_ENV_FILE_PATH;
+            await plugin.saveSettings();
+            if (backend === 'env-file') {
+              await plugin.ensureGitignore();
+              await plugin.loadTokens();
+              plugin.refreshExplorerDot();
+            }
+          });
+        t.inputEl.setAttribute('aria-label', 'Env file path');
+      });
+
+    const where = await plugin.secretLocations();
+    for (const field of SECRET_FIELD_NAMES) {
+      const spec = SECRET_FIELDS[field];
+      const row = new Setting(el)
+        .setName(spec.label)
+        .setDesc(secretStatusText(where[field], backend)
+          + ' Env key ' + spec.env + ', keychain id ' + spec.id + '.');
+      let pending = '';
+      let input = null;
+      row.addText((t) => {
+        input = t;
+        t.inputEl.type = 'password';
+        t.inputEl.setAttribute('autocomplete', 'off');
+        t.inputEl.setAttribute('aria-label', spec.label);
+        t.setPlaceholder('Paste to set by hand').onChange((v) => { pending = v; });
+      });
+      row.addButton((b) => b.setButtonText('Save').onClick(async () => {
+        const v = pending.trim();
+        pending = '';
+        if (input) input.setValue('');
+        if (!v) return;
+        try {
+          await plugin.setSecretByHand(field, v);
+          new Notice('myICOR: ' + spec.label.toLowerCase() + ' saved to ' + BACKEND_LABELS[backend] + '.');
+        } catch (e) {
+          new Notice('myICOR: could not save the ' + spec.label.toLowerCase() + ' to ' + BACKEND_LABELS[backend] + '. Check the env file path above, or Obsidian\'s keychain.', 12000);
+        }
+        this.display();
+      }));
+      if (where[field][other]) {
+        row.addButton((b) => b.setButtonText('Move to ' + BACKEND_LABELS[backend]).onClick(async () => {
+          try {
+            await plugin.moveSecret(field, backend);
+            new Notice('myICOR: ' + spec.label.toLowerCase() + ' moved to ' + BACKEND_LABELS[backend] + '.');
+          } catch (e) {
+            new Notice('myICOR: could not move the ' + spec.label.toLowerCase() + ' to ' + BACKEND_LABELS[backend] + '. Nothing was removed.', 12000);
+          }
+          this.display();
+        }));
+      }
+    }
   }
 }
 
@@ -2592,3 +3084,10 @@ class RoomDashboardView extends ItemView {
 }
 
 module.exports = MyicorConnectPlugin;
+/* The pure secrets layer, exported for test/secrets.test.mjs. */
+Object.assign(module.exports, {
+  SECRET_ID_PREFIX, SECRET_FIELDS, SECRETS_BACKENDS, DEFAULT_ENV_FILE_PATH, BACKEND_LABELS,
+  secretStorageUsable, defaultSecretsBackend, effectiveSecretsBackend,
+  parseEnvFile, upsertEnvLine, splitPlaintextTokens, persistableData,
+  KeychainBackend, EnvFileBackend, secretStatusText, MyicorConnectSettingTab,
+});

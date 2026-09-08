@@ -1,0 +1,10 @@
+{
+  "clientId": "fixture-client-id-not-real",
+  "tokens": {
+    "access_token": "FIXTURE-ACCESS-TOKEN-8f3a-not-a-real-token",
+    "refresh_token": "FIXTURE-REFRESH-TOKEN-2c91-not-a-real-token",
+    "scope": "mcp:read mcp:tools mcp:progress mcp:inner-circle",
+    "expires_at": 1757375999000
+  },
+  "reflectionSync": { "lastSyncAt": "2026-09-01T10:00:00.000Z", "lastCreated": 0, "totalLocal": 3, "totalRemote": 3, "skippedIds": [] }
+}
