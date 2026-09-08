@@ -444,9 +444,11 @@ class KeychainBackend {
     return out;
   }
   /* setSecret throws on a bad id and never carries a value in the message.
-     A blank clears: through deleteSecret where the API has one, else by
-     writing '' to an entry that exists; an id the store does not hold is
-     left unwritten, so a disconnect never creates empty entries. */
+     A blank clears: through deleteSecret, which is undocumented in
+     obsidian.d.ts and feature-detected (it exists in the 1.13.7 bundle, not
+     in the API typings), else by writing '' to an entry that exists; an id
+     the store does not hold is left unwritten, so a disconnect never
+     creates empty entries. */
   async write(values) {
     for (const f of SECRET_FIELD_NAMES) {
       if (!(f in values)) continue;

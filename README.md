@@ -58,8 +58,8 @@ Most companion plugins mirror an app inside a pane. Connect moves the
 parts of your membership that belong in a PKM into the PKM itself: your
 reflections become real markdown notes you own and can link, the
 knowledge base answers from inside the vault, and the Claude sessions
-running in this vault learn your myICOR context. One desktop connect,
-and it follows the vault everywhere.
+running in this vault learn your myICOR context. One desktop connect;
+where it follows you is one setting, see "Where your keys live".
 
 ## Account, membership and network use (disclosure)
 
