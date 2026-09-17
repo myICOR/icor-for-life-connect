@@ -5,6 +5,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.15.0 are described by their release notes on GitHub.
 
+## [0.15.1] - 2026-09-17
+
+### Fixed
+- **"Auto-reveal current file" is back in the file-explorer toolbar.** The
+  plugin's stylesheet was hiding it. Auto-reveal is Obsidian's own switch for
+  "always show me where the note I am reading sits in the folder tree", and
+  it lives as a button in the toolbar above the tree. One rule in
+  `styles.css` named two controls at once, "Reveal current file" and
+  "Auto-reveal current file", and hid both. Only the first one has another
+  way in (the command `file-explorer:reveal-active-file`, reachable from the
+  command palette). The second has none: Obsidian registers eight
+  `file-explorer:` commands and not one of them flips auto-reveal, so hiding
+  the button did not move the setting somewhere else, it took the setting
+  away. It is visible again, and nothing else on that toolbar changed.
+- The repo's only-route gate now covers it, so the rule cannot come back
+  unnoticed. The gate was seen red on the shipped stylesheet first, pointing
+  at the exact line, and green after the line came out.
+- **"New note" stays hidden under a non-English Obsidian.** That rule matched
+  the button by its English label only, so on a German or French interface
+  the button was still there. It now also matches the button's icon, which
+  does not change with the language.
+
+### Removed
+- A hide rule for a "Reveal current file" button that no version of Obsidian
+  puts on this toolbar. It matched nothing, and dead rules carrying a
+  justification are how the auto-reveal problem above started.
+
 ## [0.15.0] - 2026-09-08
 
 ### Changed
