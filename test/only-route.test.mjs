@@ -37,6 +37,21 @@ const ONLY_ROUTE = [
        + 'sorts; a bundle-wide search for a command id containing "sort" '
        + 'returns nothing. This button is the only route.',
   },
+  {
+    label: 'Auto-reveal current file',
+    why: 'Measured against the Obsidian 1.13.7 bundle on 2026-09-17: the host '
+       + 'registers eight file-explorer: commands - new-file, '
+       + 'new-file-in-current-tab, new-file-in-new-pane, new-folder, '
+       + 'duplicate-file, move-file, open, reveal-active-file - and NOT ONE of '
+       + 'them toggles auto-reveal. `file-explorer:reveal-active-file` is the '
+       + 'ONE-SHOT reveal and is a different function from the persistent '
+       + 'toggle; the toggle exists only as the nav button the host builds with '
+       + 'addNavButton("lucide-gallery-vertical", actionAutoReveal). Hiding it '
+       + 'deleted a core setting from the vault. This label rode into the hide '
+       + 'rule on the same selector list as "Reveal current file", whose '
+       + 'command route is real, and inherited a justification that was never '
+       + 'about it.',
+  },
 ];
 
 /* The controls that MAY be hidden, and the command that makes it safe. Kept

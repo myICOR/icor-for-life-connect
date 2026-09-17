@@ -1436,17 +1436,48 @@
  * function rather than deleting it. The plugin's reinstated toolbar button
  * is labelled "New unique note", which this exact-match selector can never
  * touch, so it needs no exemption here. */
-.nav-buttons-container .clickable-icon[aria-label="New note"] {
+.nav-buttons-container .clickable-icon[aria-label="New note"],
+.nav-buttons-container .clickable-icon:has(svg.lucide-edit),
+.nav-buttons-container .clickable-icon:has(svg.lucide-edit-3),
+.nav-buttons-container .clickable-icon:has(svg.lucide-pen-box) {
   display: none !important;
 }
 
-/* "Reveal current file" stays hidden because `file-explorer:reveal-active-file`
- * is a registered command, so the palette and a hotkey both still reach it. */
-.nav-buttons-container .clickable-icon[aria-label="Reveal current file"],
-.nav-buttons-container .clickable-icon[aria-label="Auto-reveal current file"] {
-  display: none !important;
-}
+/* WHY AN ICON ARM SITS BESIDE THE ARIA ARM (Flint C-2, 2026-09-17).
+ * `aria-label` is translated, and an attribute selector is an exact match, so
+ * the aria arm alone misses under every non-English interface and the button
+ * stays visible. That fails open, which is why it was never a defect, but it
+ * makes the rule true only in English. The icon class is the one thing on the
+ * button that does not change with the interface language, and INKLINE's
+ * src/85-chrome.css pairs its arms the same way.
+ *
+ * THREE ICON ARMS, AND THE COUNT IS NOT HEDGING. Measured against the 1.13.7
+ * bundle: the host builds this button with addNavButton("lucide-edit"), and
+ * setIcon stamps the svg with the id it was given, so the live class is
+ * `lucide-edit`. `edit-3` and `pen-box` are what older builds stamped; they
+ * are kept so a member on an older Obsidian is covered, and they are the two
+ * INKLINE still carries alone - which means INKLINE's own icon pairing
+ * matches nothing on 1.13.7 and its aria arm is doing all the work. Flagged
+ * to Iris; not fixable from this repo.
+ *
+ * None of the three can reach another button in this row: the suite's
+ * launchers use file-clock, calendar-check, layout-dashboard, git-fork,
+ * focus, bot and calendar-days, and the host's own remaining controls use
+ * folder-plus, sort-asc, gallery-vertical, chevrons-up-down and search. */
 
+/* "REVEAL CURRENT FILE" HAD A HIDE RULE HERE AND IT IS GONE (Flint C-1,
+ * 2026-09-17). It matched nothing. Measured against the 1.13.7 bundle: the
+ * file-explorer toolbar builds New note, New folder, change sort order,
+ * Auto-reveal current file, collapse or expand all, and search. "Reveal file
+ * in navigation" and "Reveal current file in navigation" are the names of a
+ * context-menu entry and a command, never of a button in this row, and an
+ * attribute selector is an exact match.
+ *
+ * Dead CSS carrying a justification is exactly how the auto-reveal arm rode
+ * in: it shared this selector list and inherited a command route that was
+ * never about it. That arm deleted a core setting from every vault running
+ * the suite. So the rule goes rather than being left to collect a third
+ * label.
 /* "CHANGE SORT ORDER" IS NOT HIDDEN, AND THIS COMMENT IS THE RULE.
  *
  * A rule here used to hide it, dated 2026-08-28, from the period when this
