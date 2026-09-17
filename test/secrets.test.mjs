@@ -776,9 +776,16 @@ test('Flint 1 and 3: the tab and the README say when the env file follows the va
   const env = rows.find((r) => r.name === 'Env file');
   assert.doesNotMatch(env.desc, /KEY=value/);
   assert.match(env.desc, /key=value/);
+  /* THE README MOVED AND THIS PIN FOLLOWED IT (2026-09-17). Commit 4c8ec0b
+     rewrote README.md for the person installing the plugin rather than the
+     person rebuilding it, and the two sentences pinned here went with the
+     mechanics. The GATE's subject is unchanged - the README still has to tell
+     a member that one setting decides whether the connection stays on this
+     device - so it pins the sentence the README now carries. The dot-file
+     detail is still asserted above, on the settings tab, which is where a
+     member meets it before choosing. */
   const readme = readFileSync(resolve(repo, 'README.md'), 'utf8');
-  assert.match(readme, /Obsidian Sync skips files whose name starts with a dot/);
-  assert.match(readme, /paste the refresh token/);
+  assert.match(readme, /follows\s+the vault to every device you sync/);
   assert.doesNotMatch(readme, /in every backup and sync of the vault/);
   assert.doesNotMatch(readme, /the connection follows the vault to every device;/);
   for (const text of [backend.desc, env.desc, readme]) assert.ok(!/[–—]/.test(text), 'no em or en dash');
