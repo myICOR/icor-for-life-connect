@@ -65,9 +65,31 @@ the setting explains both in plain words before you choose.
 
 ## Support
 
-Open an issue on this repository. For security problems, see `SECURITY.md`.
+What myICOR supports: the plugin as published in a tagged release, on the
+current version, installed from that release. Bugs go to this repo's issues,
+security reports to the process in `SECURITY.md`.
+
+What the community maintains: anything marked community-maintained, including
+community source adapters. We review it before it is merged. We do not support
+it, we cannot promise it keeps working, and it can be disabled or removed in
+any release.
+
+What is yours: your own changes, your fork, your local patch. Please reproduce
+the problem on a clean install of the current release before reporting it.
 
 ## Licence
 
-Source-available, see `LICENSE`. Not open source. Bundled third-party
-components: see `THIRD-PARTY-NOTICES.md`.
+MIT, see `LICENSE`. Install it, run it, read it, change it, sell it, ship it in
+your own product; keep the copyright and licence notice.
+Releases before 0.16.0 stay under the ICOR for Life
+Source-Available License (Code) v1.0 they were published with.
+
+The licence covers the code only. "ICOR", "ICOR for Life", "myICOR" and
+"Paperless Movement" are trademarks of Paperless Movement, S.L.; a fork needs
+its own plugin id and name. See `TRADEMARK.md`.
+
+Contributions are welcome as pull requests under the same MIT terms, with a
+DCO sign-off on every commit. See `CONTRIBUTING.md`.
+
+Bundled third-party components keep their own licences; see
+`THIRD-PARTY-NOTICES.md`.

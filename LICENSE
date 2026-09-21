@@ -1,71 +1,21 @@
-ICOR for Life Source-Available License (Code), Version 1.0
+MIT License
 
-Copyright (c) 2026 Paperless Movement, S.L. (myICOR) (the "Licensor")
+Copyright (c) 2026 Paperless Movement, S.L.
 
-In plain words:
-What you can do: install it, run it, read the code, modify your own copy,
-and use it in your own business.
-What you cannot do: sell it, redistribute it, or offer it (original or
-modified) as your own product or service to others.
-Contributions: send a pull request. See CONTRIBUTING.md; submitting one
-grants Paperless Movement the rights described in Section 7 of the LICENSE.
-This is not open source. It is source-available: the code is visible,
-personal and business use are free, resale and republishing are not.
-Bundled third-party components keep their own licenses; see
-THIRD-PARTY-NOTICES.md.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-This plugin is source-available. It is not open source.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-1. License grant. If you obtained this plugin through an active ICOR for Life
-   / myICOR Inner Circle membership, or by installing it from the official
-   Obsidian Community directory, the Licensor grants you a personal,
-   worldwide, non-exclusive, non-transferable, perpetual license to:
-   a. install and run the plugin in your own Obsidian vaults, on devices you
-      control;
-   b. read and study the source code; and
-   c. modify the plugin for your own personal use.
-
-2. What you may not do. You may not:
-   a. redistribute, publish, sell, rent, sublicense, or otherwise make the
-      plugin, or any modified version of it, available to any third party
-      other than the Licensor, in source or built form, in whole or in part.
-      Sending a modification to the Licensor as a proposed contribution (for
-      example, a pull request) is not distribution under this clause and is
-      addressed in Section 7;
-   b. offer, operate, or sell the plugin, or any modified version of it, as,
-      or as part of, a product or service that makes its functionality
-      available to third parties (for example, a competing plugin, a hosted
-      version, or a rebranded copy). Using the plugin yourself, including for
-      your own business, professional, or commercial activities, is not
-      restricted by this clause; or
-   c. remove or alter copyright, trademark, or license notices.
-
-3. Your copies stay yours. This license continues after your membership ends
-   for the versions you lawfully obtained while it was active. Access to new
-   versions through the membership channels requires an active membership;
-   copies installed from the Obsidian Community directory receive updates
-   through the directory.
-
-4. Mandatory rights untouched. Nothing in this license limits rights granted
-   to you by mandatory law, including Sections 69d and 69e of the German
-   Copyright Act (UrhG) and Articles 5 and 6 of Directive 2009/24/EC (error
-   correction, backup copy, observing and studying the program, decompilation
-   for interoperability), or your statutory consumer rights.
-
-5. Third-party components are licensed under their own terms; see
-   THIRD-PARTY-NOTICES.md in this repository.
-
-6. No trademark rights. "myICOR", "ICOR", and "ICOR for Life" are trademarks
-   of the Licensor. This license grants no trademark rights.
-
-7. Contributions. By submitting a contribution (for example, a pull request)
-   you grant the Licensor a perpetual, worldwide, exclusive, transferable,
-   sublicensable, royalty-free license to use, modify, and distribute your
-   contribution for any purpose, including under this license; you retain the
-   right to use your own contribution for personal purposes.
-
-8. Warranty and termination. The plugin is provided "as is", without warranty
-   of any kind, to the extent permitted by applicable law; statutory rights
-   under your membership contract are unaffected. This license terminates if
-   you materially breach it and do not cure the breach within 30 days of
-   notice.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
