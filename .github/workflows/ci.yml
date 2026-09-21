@@ -1,0 +1,47 @@
+name: CI
+
+# The pull request gate. It runs on every pull request and on every push to
+# main, and branch protection on main requires this `ci` check, so a red run
+# blocks the merge and a green one is the signal the reviewer reads.
+#
+# Merging ships nothing. A release is a bare version tag pushed by the
+# maintainer (see release.yml where present); this workflow never tags,
+# never publishes and never writes to the repository.
+#
+# Every action is pinned to a commit SHA (suite policy).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the commit under test
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        # The shared release workflow (myICOR/.github, obsidian-release.yml)
+        # defaults to Node 20; the gate runs on the same line.
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '20'
+
+      # This repo has no dependencies and no lockfile: nothing to install.
+      - name: Test
+        run: npm test

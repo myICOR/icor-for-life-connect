@@ -1,0 +1,41 @@
+name: Label pull requests
+
+# Deterministic reviewer routing. actions/labeler reads .github/labeler.yml
+# from the base branch and applies labels from the changed paths; a second
+# step marks a pull request from a fork as community-pr.
+#
+# This runs on pull_request_target so its token can label a pull request that
+# comes from a fork. It never checks out and never runs the pull request's
+# code: the only inputs it reads are the changed file paths and the event.
+#
+# Every action is pinned to a commit SHA (suite policy).
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: labeler-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Label by changed paths
+        uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          sync-labels: false
+
+      - name: Label a pull request from a fork as community-pr
+        if: github.event.pull_request.head.repo.fork
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --add-label community-pr

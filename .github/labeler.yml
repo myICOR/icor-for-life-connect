@@ -1,0 +1,31 @@
+# Reviewer routing by changed path, read by .github/workflows/labeler.yml.
+# A label here is a routing signal, never a verdict: needs-vex sends the diff
+# to the security read before review, needs-flint to the platform read.
+# Path matching only: a change inside a file this cannot see (a connector
+# registry in a single main.js) is routed by the reviewer, not by this file.
+
+needs-vex:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '.github/**'
+          - 'package.json'
+          - 'package-lock.json'
+          - 'npm-shrinkwrap.json'
+          - 'pnpm-lock.yaml'
+          - 'yarn.lock'
+          - '**/*auth*'
+          - '**/*token*'
+          - '**/*credential*'
+          - '**/*secret*'
+          - '**/*spawn*'
+          - '**/*exec*'
+
+needs-flint:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'manifest.json'
+          - 'versions.json'
+          - 'community/**'
+          - '**/connectors/**'
+          - '**/adapters/**'
+          - '**/providers/**'

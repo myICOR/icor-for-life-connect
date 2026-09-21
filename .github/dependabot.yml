@@ -1,0 +1,14 @@
+# Actions only, monthly, one grouped pull request. No npm ecosystem: runtime
+# dependencies in this suite are near zero and npm updates would be noise.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: 'ci(deps)'
