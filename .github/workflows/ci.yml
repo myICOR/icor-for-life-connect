@@ -36,11 +36,13 @@ jobs:
           persist-credentials: false
 
       - name: Set up Node
-        # The shared release workflow (myICOR/.github, obsidian-release.yml)
-        # defaults to Node 20; the gate runs on the same line.
+        # Node 22, not the shared release workflow's Node 20 default: the
+        # test script hands `node --test` a quoted glob, and the test runner
+        # only expands its own globs from Node 21. Node 20 reports "Could
+        # not find test/*.test.cjs" and fails the run (seen 2026-09-21).
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '22'
 
       # This repo has no dependencies and no lockfile: nothing to install.
       - name: Test
