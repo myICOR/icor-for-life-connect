@@ -25,28 +25,49 @@ name: DCO
 # it is the author of the commit being repaired, so nobody can certify on
 # somebody else's behalf.
 #
-# It never checks the pull request out and never runs a line of code from it,
-# which is what makes it safe on a fork pull request. The `pull_request`
-# trigger hands it a read-only token and no secrets, and it asks for neither.
+# THE ONLY COMMIT IT SKIPS IS ONE GITHUB ITSELF SIGNED
+# A bot commit is skipped only when `commit.verification.verified` is true.
+# The account type alone is NOT enough and the earlier version of this file was
+# wrong about that: GitHub resolves the author account FROM the author email,
+# and the author writes that email, so a commit authored as
+# `49699333+dependabot[bot]@users.noreply.github.com` reports `type: Bot`
+# whoever pushed it. A whole pull request of unsigned commits was green that
+# way, silently, with nothing in the diff to notice. Genuine Dependabot and
+# web-flow commits are signed by GitHub's own key and carry `verified: true`,
+# which a contributor cannot forge. (Vex F1, HIGH, 2026-09-22.)
+#
+# A MERGE COMMIT IS REJECTED, NOT SKIPPED
+# It used to be skipped, on the grounds that nobody can sign one. But a merge
+# commit can carry a diff of its own (an evil merge), so skipping it let
+# unsigned changes through the gate. These repos are squash-only
+# (`allow_merge_commit: false`), so the honest rule is the simple one: rebase on
+# main, do not merge main into the branch. (Vex F2, option b.)
+#
+# It never checks the pull request out and never runs a line of code from it.
+# That is what makes `pull_request_target` safe here, and it is the reason this
+# file must never gain an `actions/checkout` step: the documented danger of
+# `pull_request_target` is running untrusted code, and this job runs none. The
+# trigger is `pull_request_target` so the logic that runs is the BASE branch's
+# copy rather than the pull request's own, and so the run is not held behind the
+# first-time-contributor approval click. The explicit read-only `permissions`
+# block below matters more on this trigger than on `pull_request`, because
+# `pull_request_target` would otherwise hand the job a read/write token.
+#
+# A fork can still edit its own copy of this file and keep the job name, so
+# this check alone does not stop a determined contributor. The labeler marks any
+# change under `.github/` as `needs-vex`, and that pull request is read before
+# merge. (Vex F3: the older claim here, that tampering is self-defeating
+# because a renamed job never reports the required context, was true only for
+# rename and delete.)
 #
 # There is no third-party action here on purpose: `gh` and `jq` ship on the
 # runner, so there is nothing to pin by SHA and nothing outside this file to
-# trust (suite pinning policy, tsk-2026-09-06-022). For the same reason the
-# logic is inline rather than a script in the repo: on `pull_request` the
-# workflow comes from the pull request's own head, so a script it could edit
-# would be a gate grading its own author's work. Editing this file in a fork
-# does not help either, because a renamed or deleted job never reports the
-# required `DCO` context and the pull request stays blocked.
-#
-# Skipped on purpose: merge commits (GitHub writes them and nobody can sign
-# them) and commits whose author is a Bot ACCOUNT, which is what keeps
-# Dependabot green. Bot is read from the resolved GitHub account type, never
-# from the author name in the commit, which the author controls.
+# trust (suite pinning policy, tsk-2026-09-06-022).
 #
 # It does not run on `push`, so a maintainer's direct push to main is untouched.
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
 
 permissions:
@@ -114,6 +135,11 @@ jobs:
               | map(select(test("^[[:blank:]]*signed-off-by[[:blank:]]*:"; "i")))
               | map(capture("^[[:blank:]]*signed-off-by[[:blank:]]*:[[:blank:]]*(?<n>.*)<(?<e>[^>]*)>[[:blank:]]*$"; "i")
                     | (.e | trim));
+            # A commit GitHub itself signed. The ONLY skip, and the only test
+            # here a contributor cannot write into their own commit.
+            def github_signed_bot:
+              ((.author.type // "User") == "Bot")
+              and ((.commit.verification.verified // false) == true);
             . as $all
             | [ $all[]
                 | . as $r
@@ -127,19 +153,21 @@ jobs:
                 | $e
               ] as $rem
             | [ $all[]
-                | select((.parents // [] | length) < 2)
-                | select((.author.type // "User") != "Bot")
+                | select(github_signed_bot | not)
                 | . as $c
+                | ((($c.parents // []) | length) >= 2) as $ismerge
                 | ($c.commit.author.email | trim) as $ae
                 | ($c.commit.message | sob_emails) as $sobs
                 | (($c.sha // "") | ascii_downcase) as $full
                 | { sha: $full[0:7],
                     subject: ($c.commit.message // "" | split("\n")[0] | clean),
+                    merge: $ismerge,
                     any: (($sobs | length) > 0),
-                    ok: ((($sobs | index($ae)) != null)
-                         or (([ $rem[] | . as $rr
-                                | select($rr.email == $ae)
-                                | select($full | startswith($rr.target)) ] | length) > 0)) }
+                    ok: (($ismerge | not)
+                         and ((($sobs | index($ae)) != null)
+                              or (([ $rem[] | . as $rr
+                                     | select($rr.email == $ae)
+                                     | select($full | startswith($rr.target)) ] | length) > 0))) }
               ]' commits.json > report.json || \
             fail_hard "Sign-off check could not run" \
               "The check could not read the commit messages on this pull request. That is our side, not yours. Re-run this job, or say so in the pull request."
@@ -147,15 +175,35 @@ jobs:
           checked=$(jq 'length' report.json)
           bad=$(jq '[ .[] | select(.ok | not) ] | length' report.json)
           skipped=$((total - checked))
+          verified_bots=$(jq '[ .[]
+            | select(((.author.type // "User") == "Bot")
+                     and ((.commit.verification.verified // false) == true)) ] | length' commits.json)
+
+          # A pass with nothing checked was the exact shape of the bypass Vex
+          # found: "0 commit(s) checked" read as green. It is legitimate in one
+          # case only, a pull request that is entirely commits GitHub signed
+          # itself, which is what every Dependabot pull request is. So the
+          # allowance is stated as that case and not as "the report came back
+          # empty". The condition below should be unreachable while the single
+          # skip path is the verified-bot one; it exists so that adding a second
+          # skip path later cannot quietly restore green-on-nothing.
+          if [ "$checked" -lt 1 ] && [ "$verified_bots" -ne "$total" ]; then
+            fail_hard "Sign-off check could not run" \
+              "The check ended up with no commit to look at and cannot account for all of them as GitHub-signed. It refuses rather than pass on an empty result. Say so in the pull request and we will look."
+          fi
 
           if [ "$bad" -eq 0 ]; then
             {
               echo "### Sign-off: all good"
               echo
-              echo "$checked commit(s) checked, every one carries a sign-off whose email is the commit author's."
-              if [ "$skipped" -gt 0 ]; then
+              if [ "$checked" -gt 0 ]; then
+                echo "$checked commit(s) checked, every one carries a sign-off whose email is the commit author's."
+              else
+                echo "Nothing to certify: all $total commit(s) were signed by GitHub itself."
+              fi
+              if [ "$skipped" -gt 0 ] && [ "$checked" -gt 0 ]; then
                 echo
-                echo "$skipped merge or bot commit(s) skipped: nobody signs those."
+                echo "$skipped commit(s) skipped: signed by GitHub itself, so there is nobody to ask."
               fi
             } >> "$GITHUB_STEP_SUMMARY"
             echo "All $checked commit(s) are signed off."
@@ -195,7 +243,9 @@ jobs:
             echo
             jq -r '.[] | select(.ok | not)
                    | "    " + .sha + "  " + .subject + "\n        "
-                     + (if .any
+                     + (if .merge
+                        then "this is a merge commit. Please rebase your branch on main instead of merging main into it, and this goes away"
+                        elif .any
                         then "a sign-off line is there, but its email address is not the one the commit was made with"
                         else "no sign-off line"
                         end)' report.json
@@ -209,21 +259,22 @@ jobs:
             echo "    git rebase --signoff HEAD~$claimed && git push --force-with-lease"
             echo
             echo "The $claimed is how many commits this pull request has. The command"
-            echo "adds the line to each of them and updates this pull request. This"
-            echo "check then runs again by itself. Nothing else about your change is"
-            echo "touched, and you do not need to open a new pull request."
+            echo "adds the line to each of them and updates this pull request, and it"
+            echo "replaces a merge with a rebase at the same time. This check then"
+            echo "runs again by itself. Nothing else about your change is touched,"
+            echo "and you do not need to open a new pull request."
             echo
             echo "Handing it back to your AI team is the same job in one sentence:"
-            echo '"add the DCO sign-off to every commit in my pull request and push'
-            echo 'it again."'
+            echo '"add the DCO sign-off to every commit in my pull request, rebase'
+            echo 'it on main rather than merging main into it, and push it again."'
             echo
             echo "IF YOU WOULD RATHER NOT REWRITE ANYTHING"
             echo
-            echo "There is a second way, and it changes none of the commits you"
-            echo "already have: add ONE more commit whose message says, for each"
-            echo "commit listed above, that you are signing it now. The wording has"
-            echo "to be exactly this, with your own name, your own address, and the"
-            echo "short id from the list:"
+            echo "For a missing sign-off, and only for that, there is a second way"
+            echo "that changes none of the commits you already have: add ONE more"
+            echo "commit whose message says, for each commit listed above, that you"
+            echo "are signing it now. The wording has to be exactly this, with your"
+            echo "own name, your own address, and the short id from the list:"
             echo
             echo "    I, Your Name <you@example.com>, hereby add my Signed-off-by to this commit: 1a2b3c4"
             echo
@@ -231,7 +282,8 @@ jobs:
             echo
             echo "It has to be the same person who made the original commit; nobody"
             echo "can sign on somebody else's behalf. Then push that commit normally,"
-            echo "with no rewriting and no force."
+            echo "with no rewriting and no force. A merge commit cannot be fixed this"
+            echo "way; that one needs the rebase."
             echo
             echo "From now on, 'git commit -s' adds the line as you commit, and the"
             echo "question never comes up again."
