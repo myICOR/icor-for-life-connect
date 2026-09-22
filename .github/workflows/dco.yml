@@ -8,12 +8,26 @@ name: DCO
 # at the weekly review, days after the contributor had moved on. Branch
 # protection on main now requires this `DCO` check as well.
 #
-# It reads the pull request's commits through the API and compares each
-# `Signed-off-by:` line against that commit's OWN author, so a sign-off in
-# somebody else's name is not a sign-off. It never checks the pull request out
-# and never runs a line of code from it, which is what makes it safe on a fork
-# pull request. The `pull_request` trigger hands it a read-only token and no
-# secrets, and it asks for neither.
+# WHAT IT COMPARES, AND WHAT IT DELIBERATELY IGNORES
+# The EMAIL ADDRESS on the `Signed-off-by:` line has to be the address the
+# commit itself was authored with. The NAME is never read. DCO 1.1 does not ask
+# for a legal name, the kernel dropped that rule, and a name check would
+# enforce something the certificate does not require while pushing the maximum
+# of personal data into the one record nobody can erase. A consistent pseudonym
+# passes, and so does GitHub's private `<id>+<user>@users.noreply.github.com`
+# address, which is the address we recommend members use. (Lex's ruling,
+# 2026-09-22, `lex-dco-signoff-and-member-name-ruling.md` section 6.)
+#
+# It also accepts dcoapp's remediation idiom, so a contributor whose team
+# forgot `-s` can repair the pull request without rewriting anything: a later
+# commit saying `I, Name <email>, hereby add my Signed-off-by to this commit:
+# <id>`. INDIVIDUAL only. The remediation counts solely when the person making
+# it is the author of the commit being repaired, so nobody can certify on
+# somebody else's behalf.
+#
+# It never checks the pull request out and never runs a line of code from it,
+# which is what makes it safe on a fork pull request. The `pull_request`
+# trigger hands it a read-only token and no secrets, and it asks for neither.
 #
 # There is no third-party action here on purpose: `gh` and `jq` ship on the
 # runner, so there is nothing to pin by SHA and nothing outside this file to
@@ -95,23 +109,38 @@ jobs:
             def clean: (. // "") | gsub("[^[:print:]]"; " ") | gsub("`"; "'"'"'") | .[0:72];
             def trim: (. // "") | ascii_downcase
                       | gsub("^[[:blank:]]+"; "") | gsub("[[:blank:]]+$"; "");
-            [ .[]
-              | select((.parents // [] | length) < 2)
-              | select((.author.type // "User") != "Bot")
-              | . as $c
-              | ($c.commit.author.name | trim) as $an
-              | ($c.commit.author.email | trim) as $ae
-              | [ ($c.commit.message // "")
-                  | split("\n")[]
-                  | select(test("^[[:blank:]]*signed-off-by[[:blank:]]*:"; "i"))
-                  | capture("^[[:blank:]]*signed-off-by[[:blank:]]*:[[:blank:]]*(?<n>.*)<(?<e>[^>]*)>[[:blank:]]*$"; "i")
-                  | { n: (.n | trim), e: (.e | trim) }
-                ] as $sobs
-              | { sha: ($c.sha // "")[0:7],
-                  subject: ($c.commit.message // "" | split("\n")[0] | clean),
-                  any: (($sobs | length) > 0),
-                  ok: (([ $sobs[] | select(.n == $an and .e == $ae) ] | length) > 0) }
-            ]' commits.json > report.json || \
+            def sob_emails:
+              (. // "") | split("\n")
+              | map(select(test("^[[:blank:]]*signed-off-by[[:blank:]]*:"; "i")))
+              | map(capture("^[[:blank:]]*signed-off-by[[:blank:]]*:[[:blank:]]*(?<n>.*)<(?<e>[^>]*)>[[:blank:]]*$"; "i")
+                    | (.e | trim));
+            . as $all
+            | [ $all[]
+                | . as $r
+                | ($r.commit.author.email | trim) as $re
+                | ($r.commit.message | sob_emails) as $rsob
+                | ($r.commit.message // "") | split("\n")[]
+                | capture("^[[:blank:]]*I,[[:blank:]]*(?<who>[^<]*)<(?<we>[^>]*)>[[:blank:]]*,[[:blank:]]*hereby add my signed-off-by to this commit:[[:blank:]]*(?<t>[0-9a-fA-F]{7,40})[[:blank:]]*$"; "i")
+                | { target: (.t | ascii_downcase), email: (.we | trim) } as $e
+                | select($e.email == $re)
+                | select(($rsob | index($e.email)) != null)
+                | $e
+              ] as $rem
+            | [ $all[]
+                | select((.parents // [] | length) < 2)
+                | select((.author.type // "User") != "Bot")
+                | . as $c
+                | ($c.commit.author.email | trim) as $ae
+                | ($c.commit.message | sob_emails) as $sobs
+                | (($c.sha // "") | ascii_downcase) as $full
+                | { sha: $full[0:7],
+                    subject: ($c.commit.message // "" | split("\n")[0] | clean),
+                    any: (($sobs | length) > 0),
+                    ok: ((($sobs | index($ae)) != null)
+                         or (([ $rem[] | . as $rr
+                                | select($rr.email == $ae)
+                                | select($full | startswith($rr.target)) ] | length) > 0)) }
+              ]' commits.json > report.json || \
             fail_hard "Sign-off check could not run" \
               "The check could not read the commit messages on this pull request. That is our side, not yours. Re-run this job, or say so in the pull request."
 
@@ -123,7 +152,7 @@ jobs:
             {
               echo "### Sign-off: all good"
               echo
-              echo "$checked commit(s) checked, every one carries its sign-off line."
+              echo "$checked commit(s) checked, every one carries a sign-off whose email is the commit author's."
               if [ "$skipped" -gt 0 ]; then
                 echo
                 echo "$skipped merge or bot commit(s) skipped: nobody signs those."
@@ -145,22 +174,29 @@ jobs:
             echo "WHAT IS MISSING"
             echo
             echo "Every commit needs a sign-off: one line at the end of the commit"
-            echo "message carrying your name and your email."
+            echo "message, carrying a name and an email address."
             echo
             echo "    Signed-off-by: Your Name <you@example.com>"
             echo
-            echo "That line is the whole of it. It says you wrote the change, or have"
-            echo "the right to send it, and that you are fine with it going out under"
-            echo "this plugin's MIT licence. Your name is public in the plugin's"
-            echo "history from then on. Your AI team adds the line for you; you never"
-            echo "have to type it yourself."
+            echo "That line is the whole of it. It is your word that the change is"
+            echo "yours to give, whether you typed it or your AI team did, and that"
+            echo "it may go out under this plugin's MIT licence. Your AI team adds"
+            echo "the line for you; you never have to type it yourself."
+            echo
+            echo "The name can be the name you go by on GitHub, your own or a"
+            echo "consistent nickname, as long as it is yours and not misleading."
+            echo "This check never reads the name. What it reads is the email"
+            echo "address, which has to be the same address the commit itself was"
+            echo "made with. GitHub's private address, the one that looks like"
+            echo "12345+you@users.noreply.github.com, passes, and it is the one we"
+            echo "recommend you use."
             echo
             echo "THE COMMITS THAT NEED IT"
             echo
             jq -r '.[] | select(.ok | not)
                    | "    " + .sha + "  " + .subject + "\n        "
                      + (if .any
-                        then "a sign-off line is there, but the name and email on it are not the ones on the commit"
+                        then "a sign-off line is there, but its email address is not the one the commit was made with"
                         else "no sign-off line"
                         end)' report.json
             echo
@@ -180,6 +216,22 @@ jobs:
             echo "Handing it back to your AI team is the same job in one sentence:"
             echo '"add the DCO sign-off to every commit in my pull request and push'
             echo 'it again."'
+            echo
+            echo "IF YOU WOULD RATHER NOT REWRITE ANYTHING"
+            echo
+            echo "There is a second way, and it changes none of the commits you"
+            echo "already have: add ONE more commit whose message says, for each"
+            echo "commit listed above, that you are signing it now. The wording has"
+            echo "to be exactly this, with your own name, your own address, and the"
+            echo "short id from the list:"
+            echo
+            echo "    I, Your Name <you@example.com>, hereby add my Signed-off-by to this commit: 1a2b3c4"
+            echo
+            echo "    Signed-off-by: Your Name <you@example.com>"
+            echo
+            echo "It has to be the same person who made the original commit; nobody"
+            echo "can sign on somebody else's behalf. Then push that commit normally,"
+            echo "with no rewriting and no force."
             echo
             echo "From now on, 'git commit -s' adds the line as you commit, and the"
             echo "question never comes up again."
