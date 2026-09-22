@@ -1,0 +1,203 @@
+name: DCO
+
+# The commit sign-off gate. CONTRIBUTING asks every commit for a Developer
+# Certificate of Origin sign-off line (DCO 1.1, `git commit -s`) and says that
+# pull requests with unsigned commits are not merged. Until this workflow
+# existed nothing checked it: required checks on main were `ci` alone, so an
+# unsigned pull request could be merged and a missing sign-off was found by eye
+# at the weekly review, days after the contributor had moved on. Branch
+# protection on main now requires this `DCO` check as well.
+#
+# It reads the pull request's commits through the API and compares each
+# `Signed-off-by:` line against that commit's OWN author, so a sign-off in
+# somebody else's name is not a sign-off. It never checks the pull request out
+# and never runs a line of code from it, which is what makes it safe on a fork
+# pull request. The `pull_request` trigger hands it a read-only token and no
+# secrets, and it asks for neither.
+#
+# There is no third-party action here on purpose: `gh` and `jq` ship on the
+# runner, so there is nothing to pin by SHA and nothing outside this file to
+# trust (suite pinning policy, tsk-2026-09-06-022). For the same reason the
+# logic is inline rather than a script in the repo: on `pull_request` the
+# workflow comes from the pull request's own head, so a script it could edit
+# would be a gate grading its own author's work. Editing this file in a fork
+# does not help either, because a renamed or deleted job never reports the
+# required `DCO` context and the pull request stays blocked.
+#
+# Skipped on purpose: merge commits (GitHub writes them and nobody can sign
+# them) and commits whose author is a Bot ACCOUNT, which is what keeps
+# Dependabot green. Bot is read from the resolved GitHub account type, never
+# from the author name in the commit, which the author controls.
+#
+# It does not run on `push`, so a maintainer's direct push to main is untouched.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dco-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dco:
+    name: DCO
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Every commit carries its own sign-off
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          CLAIMED: ${{ github.event.pull_request.commits }}
+        run: |
+          set -uo pipefail
+
+          fail_hard() {
+            echo "::error title=$1::$2"
+            {
+              echo "### Sign-off check could not run"
+              echo
+              echo "$2"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+
+          # `--paginate` emits one JSON array per page; `jq -s add` joins them.
+          if ! gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits" \
+               | jq -s 'add' > commits.json; then
+            fail_hard "Sign-off check could not run" \
+              "The check could not read this pull request's commits. That is our side, not yours, and nothing is wrong with your change. Re-run this job, or say so in the pull request and we will."
+          fi
+
+          total=$(jq 'if type == "array" then length else -1 end' commits.json)
+          if [ "$total" -lt 1 ]; then
+            fail_hard "Sign-off check could not run" \
+              "The check read no commits for this pull request, so it cannot tell whether they are signed. It refuses rather than assume there was nothing to check. Re-run this job, or say so in the pull request."
+          fi
+
+          # The API returns at most 250 commits for a pull request. Fewer read
+          # than the event claims means the tail was never seen, and an unread
+          # commit must never render as a signed one.
+          claimed="${CLAIMED:-$total}"
+          if [ "$total" -lt "$claimed" ]; then
+            fail_hard "Too many commits to check" \
+              "This pull request has $claimed commits and the API returns at most 250, so the check cannot read them all and will not guess. Please split it into smaller pull requests, which is what we ask for anyway."
+          fi
+
+          jq '
+            def clean: (. // "") | gsub("[^[:print:]]"; " ") | gsub("`"; "'"'"'") | .[0:72];
+            def trim: (. // "") | ascii_downcase
+                      | gsub("^[[:blank:]]+"; "") | gsub("[[:blank:]]+$"; "");
+            [ .[]
+              | select((.parents // [] | length) < 2)
+              | select((.author.type // "User") != "Bot")
+              | . as $c
+              | ($c.commit.author.name | trim) as $an
+              | ($c.commit.author.email | trim) as $ae
+              | [ ($c.commit.message // "")
+                  | split("\n")[]
+                  | select(test("^[[:blank:]]*signed-off-by[[:blank:]]*:"; "i"))
+                  | capture("^[[:blank:]]*signed-off-by[[:blank:]]*:[[:blank:]]*(?<n>.*)<(?<e>[^>]*)>[[:blank:]]*$"; "i")
+                  | { n: (.n | trim), e: (.e | trim) }
+                ] as $sobs
+              | { sha: ($c.sha // "")[0:7],
+                  subject: ($c.commit.message // "" | split("\n")[0] | clean),
+                  any: (($sobs | length) > 0),
+                  ok: (([ $sobs[] | select(.n == $an and .e == $ae) ] | length) > 0) }
+            ]' commits.json > report.json || \
+            fail_hard "Sign-off check could not run" \
+              "The check could not read the commit messages on this pull request. That is our side, not yours. Re-run this job, or say so in the pull request."
+
+          checked=$(jq 'length' report.json)
+          bad=$(jq '[ .[] | select(.ok | not) ] | length' report.json)
+          skipped=$((total - checked))
+
+          if [ "$bad" -eq 0 ]; then
+            {
+              echo "### Sign-off: all good"
+              echo
+              echo "$checked commit(s) checked, every one carries its sign-off line."
+              if [ "$skipped" -gt 0 ]; then
+                echo
+                echo "$skipped merge or bot commit(s) skipped: nobody signs those."
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "All $checked commit(s) are signed off."
+            exit 0
+          fi
+
+          # Everything below is read by a person who has very likely never heard
+          # of a sign-off. It says what is missing, in what, and the one command
+          # that fixes commits that are already pushed. Keep it that way.
+          {
+            echo "======================================================================"
+            echo "Nothing is wrong with your change. One line is missing from some"
+            echo "of its commits, and one command adds it."
+            echo "======================================================================"
+            echo
+            echo "WHAT IS MISSING"
+            echo
+            echo "Every commit needs a sign-off: one line at the end of the commit"
+            echo "message carrying your name and your email."
+            echo
+            echo "    Signed-off-by: Your Name <you@example.com>"
+            echo
+            echo "That line is the whole of it. It says you wrote the change, or have"
+            echo "the right to send it, and that you are fine with it going out under"
+            echo "this plugin's MIT licence. Your name is public in the plugin's"
+            echo "history from then on. Your AI team adds the line for you; you never"
+            echo "have to type it yourself."
+            echo
+            echo "THE COMMITS THAT NEED IT"
+            echo
+            jq -r '.[] | select(.ok | not)
+                   | "    " + .sha + "  " + .subject + "\n        "
+                     + (if .any
+                        then "a sign-off line is there, but the name and email on it are not the ones on the commit"
+                        else "no sign-off line"
+                        end)' report.json
+            echo
+            echo "THE ONE COMMAND THAT FIXES IT"
+            echo
+            echo "These commits are already pushed, so the line has to be added to"
+            echo "them where they are. That is normal, and it is one command. Run it"
+            echo "in the copy of the repo your team worked in:"
+            echo
+            echo "    git rebase --signoff HEAD~$claimed && git push --force-with-lease"
+            echo
+            echo "The $claimed is how many commits this pull request has. The command"
+            echo "adds the line to each of them and updates this pull request. This"
+            echo "check then runs again by itself. Nothing else about your change is"
+            echo "touched, and you do not need to open a new pull request."
+            echo
+            echo "Handing it back to your AI team is the same job in one sentence:"
+            echo '"add the DCO sign-off to every commit in my pull request and push'
+            echo 'it again."'
+            echo
+            echo "From now on, 'git commit -s' adds the line as you commit, and the"
+            echo "question never comes up again."
+            echo
+            echo "WHERE THIS COMES FROM"
+            echo
+            echo "    CONTRIBUTING.md in this repo, the sign-off paragraph"
+            echo "    https://developercertificate.org  (DCO 1.1, 14 lines)"
+          } > message.txt
+
+          cat message.txt
+          {
+            echo "## A commit is missing its sign-off line"
+            echo
+            echo '```'
+            cat message.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "::error title=A commit is missing its sign-off line::Sign-off missing on $bad of $checked commit(s) in this pull request. Open Details for the one command that fixes it."
+          exit 1
