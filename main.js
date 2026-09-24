@@ -595,19 +595,28 @@ class MyicorConnectPlugin extends Plugin {
     });
     /* The only one of the four with logic of its own, and the only one that
        had no other route at all before this. Canvases land beside the notes
-       they sketch: 00 Daily Scratchpad, named YYYY-MM-DD_canvas, with -N on
-       collisions. */
+       they sketch: 00 Daily Scratchpad/YYYY/MM, the date-nested shape the
+       scaffold's validator enforces, named YYYY-MM-DD_canvas, with -N on
+       collisions. The year and month folders are created on first use;
+       createFolder throws on a folder that exists, so each level is checked
+       before it is created and the parent is never assumed. */
     this.addCommand({
       id: 'new-scratchpad-canvas',
       name: 'New canvas in the Daily Scratchpad',
       callback: async () => {
         const d = new Date();
         const pad = (n) => String(n).padStart(2, '0');
-        const base = '00 Daily Scratchpad/' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + '_canvas';
+        const year = String(d.getFullYear());
+        const month = pad(d.getMonth() + 1);
+        const folder = '00 Daily Scratchpad/' + year + '/' + month;
+        const base = folder + '/' + year + '-' + month + '-' + pad(d.getDate()) + '_canvas';
         let path = base + '.canvas';
         let i = 1;
         while (this.app.vault.getAbstractFileByPath(path)) path = base + '-' + i++ + '.canvas';
         try {
+          for (const dir of ['00 Daily Scratchpad/' + year, folder]) {
+            if (!this.app.vault.getAbstractFileByPath(dir)) await this.app.vault.createFolder(dir);
+          }
           const file = await this.app.vault.create(path, '{"nodes":[],"edges":[]}');
           await this.app.workspace.getLeaf(true).openFile(file);
         } catch (e) {
