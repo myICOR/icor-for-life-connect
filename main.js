@@ -2890,7 +2890,12 @@ class RoomDashboardView extends ItemView {
   renderScratchpad(body) {
     const notes = this.notes();
     const daily = notes.filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f.basename));
-    const captures = notes.filter((f) => /^\d{14}(-\d+)?$/.test(f.basename));
+    /* A quick capture is named by the moment it was made, in one of the three
+       shapes the scaffold's validator accepts: YYYY-MM-DD-HHmmss (the Unique
+       note creator the new-note button runs, -N on a same-second collision),
+       the older YYYYMMDDHHmm (Obsidian's " 2" on a collision, " - title" when
+       the member names it after the fact), and YYYYMMDDHHmmss with -N. */
+    const captures = notes.filter((f) => /^(\d{4}-\d{2}-\d{2}-\d{6}(-\d+)?|\d{12}( \d+)?( - .+)?|\d{14}(-\d+)?)$/.test(f.basename));
     const processed = notes.filter((f) => this.fm(f).processed === true);
     const unprocessed = notes.filter((f) => this.fm(f).processed !== true);
 
@@ -3172,4 +3177,6 @@ Object.assign(module.exports, {
   /* The Overview's numbers and the view that renders them, exported for
      test/loop-percent.test.mjs. */
   loopPercent, coursesClosed, DashboardView,
+  /* The room views, exported for test/scratchpad-capture-count.test.mjs. */
+  RoomDashboardView,
 });
