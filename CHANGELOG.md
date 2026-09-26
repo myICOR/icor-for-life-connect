@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.15.0 are described by their release notes on GitHub.
 
+## [0.16.1] - 2026-09-26
+
+### Fixed
+- **The room 00 dashboard counts your quick captures again.** The "quick
+  captures" slab read 0 in every vault that follows the Scaffold's naming
+  rule, because it only counted a note named with fourteen bare digits.
+  It now counts the capture names the Scaffold's own check accepts,
+  `YYYYMMDDHHmm` and `YYYY-MM-DD-HHmmss`, each with its collision suffix,
+  and still counts the fourteen-digit shape, so no existing count drops.
+  Captures inside `YYYY/MM/` folders are counted too. Thanks to Ian
+  Slattery (@ipslatte) for the fix (#4, closes #3).
+- **"New canvas in the Daily Scratchpad" files the canvas in `YYYY/MM/`.**
+  The command wrote the canvas to the root of `00 Daily Scratchpad/`,
+  which the Scaffold's check reports as misplaced. It now writes
+  `00 Daily Scratchpad/YYYY/MM/YYYY-MM-DD_canvas.canvas` for your local
+  day, creates the year and month folders when they are missing, and keeps
+  the `-2` suffix for a second canvas on the same day. In a vault with no
+  Daily Scratchpad room yet, the command now creates it instead of
+  failing. Thanks to Ian Slattery (@ipslatte) for the fix (#2, closes #1).
+
 ## [0.16.0] - 2026-09-21
 
 ### Changed
