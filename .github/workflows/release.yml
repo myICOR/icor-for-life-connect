@@ -54,6 +54,11 @@ jobs:
     needs: guard
     permissions:
       contents: write
+      # Build provenance in the shared release job (myICOR/.github PR #1):
+      # a short-lived OIDC token for Sigstore and the right to store the
+      # attestation. A reusable workflow never holds more than this grant.
+      id-token: write
+      attestations: write
     uses: myICOR/.github/.github/workflows/obsidian-release.yml@main
     with:
       kind: plugin
