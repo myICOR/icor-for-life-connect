@@ -19,6 +19,8 @@ Releases before 0.15.0 are described by their release notes on GitHub.
   completes the Interface promise: the lesson says "Choose 'Obsidian's own
   file controls' to bring back the vault switcher, New folder, New note, and
   sort controls", and all four now come back.
+- A test now holds every selector that reaches the New note button to
+  `body.icor-scaffold-chrome`.
 
 ## [0.16.1] - 2026-09-26
 
