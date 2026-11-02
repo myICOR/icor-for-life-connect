@@ -1435,11 +1435,16 @@
  * Daily notes plugin registers its own - so hiding it relocates the
  * function rather than deleting it. The plugin's reinstated toolbar button
  * is labelled "New unique note", which this exact-match selector can never
- * touch, so it needs no exemption here. */
-.nav-buttons-container .clickable-icon[aria-label="New note"],
-.nav-buttons-container .clickable-icon:has(svg.lucide-edit),
-.nav-buttons-container .clickable-icon:has(svg.lucide-edit-3),
-.nav-buttons-container .clickable-icon:has(svg.lucide-pen-box) {
+ * touch, so it needs no exemption here.
+ *
+ * SCOPED TO ICOR SCAFFOLD CHROME: Interface 0.8.0 introduced "Obsidian's own
+ * file controls" as a user toggle. When that toggle is on, Interface removes
+ * body.icor-scaffold-chrome, and this rule must not fire - the user chose to
+ * see Obsidian's own controls, including the "New note" button. */
+body.icor-scaffold-chrome .nav-buttons-container .clickable-icon[aria-label="New note"],
+body.icor-scaffold-chrome .nav-buttons-container .clickable-icon:has(svg.lucide-edit),
+body.icor-scaffold-chrome .nav-buttons-container .clickable-icon:has(svg.lucide-edit-3),
+body.icor-scaffold-chrome .nav-buttons-container .clickable-icon:has(svg.lucide-pen-box) {
   display: none !important;
 }
 
