@@ -5,6 +5,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.15.0 are described by their release notes on GitHub.
 
+## [0.16.2] - 2026-11-02
+
+### Fixed
+- **"New note" button respects Interface's "Obsidian's own file controls" toggle.**
+  The stylesheet's rule that hides the "New note" button now only fires when
+  ICOR scaffold chrome is active (`body.icor-scaffold-chrome`). Interface 0.8.0
+  introduced "Obsidian's own file controls" as a user toggle that promises to
+  restore all four controls (vault switcher, New folder, sort, and New note).
+  The rule was unconditional with `!important`, so the New note button stayed
+  hidden even when the user chose Obsidian's own controls. It now shows when
+  that toggle is on, matching the pattern INKLINE already follows. This
+  completes the Interface promise: the lesson says "Choose 'Obsidian's own
+  file controls' to bring back the vault switcher, New folder, New note, and
+  sort controls", and all four now come back.
+
 ## [0.16.1] - 2026-09-26
 
 ### Fixed
