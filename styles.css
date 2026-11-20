@@ -40,7 +40,7 @@
 
 /* The label voice, shared (INKLINE .ik-label): the body font, small, tracked, upper case. No monospace: since the new
    Home (0.17.0) a label reads like the app's, not like a terminal. */
-.micor-hit-kicker, .micor-report-kicker, .micor-billboard-kicker,
+.micor-hit-kicker, .micor-billboard-kicker,
 .micor-masthead-kicker, .micor-card-title, .micor-stat-label,
 .micor-dash .micor-tile-meta, .micor-dash .micor-course-meta, .micor-dash .micor-cat-meta, .micor-dash .micor-ann-meta,
 .micor-milestone-date, .micor-lesson-time, .micor-header-sub, .micor-footer,
@@ -286,7 +286,7 @@
   padding: 8px 24px 8px;
 }
 .micor-dash .micor-page--home, .micor-dash .micor-page--search, .micor-dash .micor-page--latest,
-.micor-dash .micor-page--trends, .micor-dash .micor-page--announcements { max-width: 72rem; padding-bottom: 40px; }
+.micor-dash .micor-page--announcements { max-width: 72rem; padding-bottom: 40px; }
 .micor-page-body { padding-top: 18px; }
 @container micor (max-width: 540px) {
   .micor-top, .micor-masthead, .micor-page, .micor-footer { padding-left: 16px; padding-right: 16px; }
@@ -439,53 +439,6 @@
   .micor-hit.is-clickable:hover .micor-hit-title::after { transform: scaleX(1); }
 }
 .micor-hit:focus-visible { outline: 2px solid var(--micor-marker); outline-offset: -2px; border-radius: 10px; }
-
-/* ---------------------------------------------------- trend reports ----- */
-.micor-report-list { display: block; padding-bottom: 8px; }
-.micor-report {
-  padding: 18px 4px 20px;
-  border-bottom: 1px solid var(--micor-hairline-subtle);
-  cursor: pointer;
-}
-.micor-report:last-child { border-bottom: none; }
-.micor-report-kicker { font-size: 10.5px; letter-spacing: 0.12em; color: var(--micor-faint); }
-.micor-report-title {
-  font-family: var(--micor-display);
-  font-weight: 640;
-  font-size: 19px;
-  line-height: 1.25;
-  color: var(--micor-paper);
-  margin-top: 6px;
-}
-.micor-report-title::after {
-  content: '';
-  display: block;
-  height: 2px;
-  width: 26px;
-  margin-top: 6px;
-  border-radius: 999px;
-  background: var(--micor-marker);
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 240ms var(--micor-ease);
-}
-.micor-report-subtitle { font-size: 13.5px; color: var(--micor-dim); margin-top: 4px; max-width: 62ch; }
-.micor-report-headlines { margin-top: 12px; display: flex; flex-direction: column; gap: 7px; }
-.micor-report-headline { display: flex; gap: 10px; align-items: center; color: var(--micor-dim); font-size: 13px; }
-.micor-report-headline span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.micor-dashline {
-  width: 14px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--ink-hairline-emphasis, var(--micor-hairline));
-  flex-shrink: 0;
-  transition: background-color 160ms ease-out;
-}
-@media (hover: hover) {
-  .micor-report:hover { background: var(--micor-wash); }
-  .micor-report:hover .micor-report-title::after { transform: scaleX(1); }
-  .micor-report:hover .micor-dashline { background: color-mix(in srgb, var(--micor-paper) 22%, transparent); }
-}
 
 /* -------------------------------------------------------- open tiles ---- */
 

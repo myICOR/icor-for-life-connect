@@ -55,12 +55,11 @@ const MARK_SVG =
   'stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
 
 /* The dashboard's pages (0.17.0, the new Home). Home is app.myicor.com's Home as far as the myICOR MCP can serve it;
- * the other four are the plugin's own lists. `overview`, the old Your Loop page, opens Home. */
+ * the other three are the plugin's own lists. `overview`, the old Your Loop page, opens Home. */
 const PAGES = [
   { key: 'home', icon: 'home', label: 'Home' },
   { key: 'search', icon: 'search', label: 'Search', eyebrow: 'Search', title: 'Lessons, resources and answers' },
   { key: 'latest', icon: 'library', label: 'Library', eyebrow: 'Library', title: 'New in the library' },
-  { key: 'trends', icon: 'trending-up', label: 'Trend reports', eyebrow: 'Trend reports', title: 'What moved this week' },
   { key: 'announcements', icon: 'megaphone', label: 'Announcements', eyebrow: 'Announcements', title: 'From the team' },
 ];
 const PAGE_ALIASES = { overview: 'home' };
@@ -2160,7 +2159,6 @@ class DashboardView extends ItemView {
 
   async renderPage(body, page) {
     if (page === 'search') { this.renderSearch(body, true); return; }
-    if (page === 'trends') { await this.renderTrendsPage(body); return; }
     if (page === 'latest') { await this.renderLatestPage(body); return; }
     if (page === 'announcements') { await this.renderBoardPage(body); return; }
   }
@@ -2468,48 +2466,6 @@ class DashboardView extends ItemView {
     input.addEventListener('input', () => line.toggleClass('has-value', input.value.length > 0));
     input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') run(); });
     if (focus) window.setTimeout(() => input.focus(), 30);
-  }
-
-  /* ------------------------------------------------------------- trends -- */
-
-  async renderTrendsPage(body) {
-    this.skeletonRows(body, 3);
-    let payload;
-    try {
-      payload = await this.fetchTool('get_trend_reports', { limit: 10 });
-    } catch (e) {
-      body.empty();
-      this.renderPageError(body, e);
-      return;
-    }
-    body.empty();
-    const reports = payload.reports || [];
-    if (!reports.length) {
-      this.emptyState(body, 'trending-up', 'No published trend reports yet.', 'the radar sweeps weekly');
-      return;
-    }
-    const list = body.createDiv({ cls: 'micor-report-list' });
-    for (const r of reports) {
-      const row = list.createDiv({ cls: 'micor-report is-clickable' });
-      const kick = [];
-      kick.push('TREND REPORT');
-      if (r.report_date) kick.push(kickerDate(r.report_date));
-      if (r.like_count) kick.push('♥ ' + r.like_count);
-      if (r.comment_count) kick.push(r.comment_count + ' COMMENTS');
-      row.createDiv({ cls: 'micor-report-kicker', text: kick.join(' · ') });
-      row.createDiv({ cls: 'micor-report-title', text: r.title || 'Trend report' });
-      if (r.subtitle) row.createDiv({ cls: 'micor-report-subtitle', text: r.subtitle });
-      const heads = Array.isArray(r.headlines) ? r.headlines : [];
-      if (heads.length) {
-        const hl = row.createDiv({ cls: 'micor-report-headlines' });
-        for (const h of heads.slice(0, 3)) {
-          const line = hl.createDiv({ cls: 'micor-report-headline' });
-          line.createDiv({ cls: 'micor-dashline' });
-          line.createSpan({ text: typeof h === 'string' ? h : (h && (h.title || h.headline)) || '' });
-        }
-      }
-      row.addEventListener('click', () => this.openLink(BASE_URL + '/trend-reports/' + r.id));
-    }
   }
 
   /* ------------------------------------------------------------- latest -- */

@@ -54,8 +54,8 @@ Releases before 0.15.0 are described by their release notes on GitHub.
     app.myicor.com;
   - in this vault: the reflections sync, the knowledge search and Claude's
     connection.
-- **One bar for the dashboard:** Home, Search, Library, Trend reports and
-  Announcements, with the open, refresh and disconnect buttons beside them.
+- **One bar for the dashboard:** Home, Search, Library and Announcements,
+  with the open, refresh and disconnect buttons beside them.
   Labels use the body font; monospace is gone. Every button and field has one
   edge: the dashboard tells the INKLINE theme to leave its controls alone
   (`data-ink-plugin`).
@@ -66,6 +66,8 @@ Releases before 0.15.0 are described by their release notes on GitHub.
   own card.
 
 ### Removed
+- **Trend reports.** The Trend reports page, its data and its styles are gone
+  from Connect; the reports stay on app.myicor.com.
 - **The ICOR Journey loop page** (the loop gauge, the path through the
   courses, the slabs, the Growth Assignment gaps) and its styles. Opening
   "overview" opens Home.

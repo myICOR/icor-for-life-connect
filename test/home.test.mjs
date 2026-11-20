@@ -8,7 +8,7 @@
  *      made-up figure; the newest video, article and podcast by Tom and Paco; the course to pick up.
  *   2. THE PAGE: rendered on the real DashboardView over the fake DOM: the weekday and "Find your way back to clear",
  *      the up-next line, the six lit cards with their marks, the two lists, and the reflections sync still reachable.
- *   3. THE SHELL: data-ink-plugin on the root, one bar with five pages, no masthead or drawn stroke on Home, the old
+ *   3. THE SHELL: data-ink-plugin on the root, one bar with four pages, no masthead or drawn stroke on Home, the old
  *      Your Loop page opening Home.
  *   4. THE DATA: one round of parallel calls; the courses are required, every other piece is optional; the Build
  *      outline comes back as text.
@@ -246,7 +246,7 @@ test('the page: the reflections sync and the knowledge search stay one click awa
 
 /* --------------------------------------------------------- 3. THE SHELL -- */
 
-test('the shell: data-ink-plugin, one bar with five pages, no masthead or stroke on Home, overview opens Home', async () => {
+test('the shell: data-ink-plugin, one bar with four pages, no masthead or stroke on Home, overview opens Home', async () => {
   const M = load();
   const { v, plugin } = view(M);
   plugin.fetchHomeData = async () => DATA;
@@ -256,7 +256,7 @@ test('the shell: data-ink-plugin, one bar with five pages, no masthead or stroke
   assert.equal(v.root.getAttribute('data-ink-plugin'), '', 'the theme\'s control skins stand down inside');
   assert.ok(v.root.hasClass('micor-dash'));
   const items = v.root.querySelectorAll('.micor-pages-item');
-  assert.deepEqual(items.map((i) => i.querySelector('.micor-pages-label').textContent), ['Home', 'Search', 'Library', 'Trend reports', 'Announcements']);
+  assert.deepEqual(items.map((i) => i.querySelector('.micor-pages-label').textContent), ['Home', 'Search', 'Library', 'Announcements']);
   assert.ok(items[0].hasClass('is-active'));
   assert.equal(items[0].getAttribute('aria-current'), 'page');
   assert.equal(v.root.querySelector('.micor-masthead'), null);
@@ -267,6 +267,8 @@ test('the shell: data-ink-plugin, one bar with five pages, no masthead or stroke
   v.setPage('nonsense');
   assert.equal(v.page, 'home');
   assert.equal(M.pageFor('latest').label, 'Library');
+  assert.equal(M.pageFor('trends').key, 'home', 'trend reports left Connect: the old key opens Home');
+  assert.doesNotMatch(source, /trend|get_trend_reports/i, 'no trend reports anywhere in the plugin');
 });
 
 /* ---------------------------------------------------------- 4. THE DATA -- */
