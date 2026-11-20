@@ -38,7 +38,37 @@ Releases before 0.15.0 are described by their release notes on GitHub.
   vault without the room is not told it is missing, and the dashboard never
   attaches to an old `06 AI Team` folder.
 
+### Changed
+- **The myICOR dashboard is your Home.** Connect's main view now shows the Home
+  of app.myicor.com in INKLINE's current look, instead of the old ICOR Journey
+  loop. At the top: the day, "Find your way back to clear" and where you left
+  off as one line (your next lesson). Then:
+  - the newest video, article and podcast from Tom and Paco;
+  - one lit card for each product on the roadmap (ICOR Kickstart, ICOR Journey,
+    ICOR Teams, ICOR AI, ICOR Coaching, ICOR Build), each with its drawn mark,
+    its light and your progress where myICOR shares it. The Journey card counts
+    your four journey courses, Teams counts ICOR Teams and Build counts the
+    lessons you built. A card without a number says where its progress is,
+    never a guess;
+  - your mentions and replies, events and the week's poll, as links that open
+    app.myicor.com;
+  - in this vault: the reflections sync, the knowledge search and Claude's
+    connection.
+- **One bar for the dashboard:** Home, Search, Library, Trend reports and
+  Announcements, with the open, refresh and disconnect buttons beside them.
+  Labels use the body font; monospace is gone. Every button and field has one
+  edge: the dashboard tells the INKLINE theme to leave its controls alone
+  (`data-ink-plugin`).
+- The Library page uses the Home's library cards. Search has one field with a
+  focus ring instead of an orange underline. Announcements keeps its one orange
+  button and loses the hand-drawn stroke and the orange labels.
+- No light spreads across the top of the view; a place shows its light on its
+  own card.
+
 ### Removed
+- **The ICOR Journey loop page** (the loop gauge, the path through the
+  courses, the slabs, the Growth Assignment gaps) and its styles. Opening
+  "overview" opens Home.
 - **The WiP dashboard (room 03).** Work in progress now happens with your AI
   agents, outside the vault, and only finished work comes in, so ICOR for Life
   3.0 has no `03 WiP`. Its dashboard is gone, and a vault without the room is

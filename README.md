@@ -28,9 +28,11 @@ That is the setup. Your dashboard opens from the same button.
 
 ## What you get
 
-**The ICOR Journey dashboard.** Your stage and milestones drawn on the Loop,
-Growth Assignment progress and average score, your reflections, streaks, and a
-breakdown by category.
+**Your myICOR Home, inside the vault.** The Home of app.myicor.com: where you
+left off, the newest videos, articles and podcasts from Tom and Paco, and one
+card for each part of the roadmap (ICOR Kickstart, ICOR Journey, ICOR Teams,
+ICOR AI, ICOR Coaching and ICOR Build) with your progress where myICOR can
+share it. Your mentions, events and the week's poll open on app.myicor.com.
 
 **Knowledge-base search.** The Inner Circle library, searchable from inside
 the vault.
