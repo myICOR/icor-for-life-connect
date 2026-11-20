@@ -28,11 +28,24 @@ Releases before 0.15.0 are described by their release notes on GitHub.
   and the new place. No value is ever logged or shown; every new sentence names
   paths only.
 
+### Added
+- **The Outer World dashboard (room 06).** ICOR for Life 3.0 has a room for
+  what others made: one note per book, article, video, podcast, post or paper
+  (`type: source`), from the Web Clipper, Readwise or by hand. Its dashboard
+  counts your sources, the reading queue (`consumed: false`), what you captured
+  this month and how many link to a project, a Key Element or a topic, and
+  lists the queue, the sources not connected yet and the latest arrivals. A
+  vault without the room is not told it is missing, and the dashboard never
+  attaches to an old `06 AI Team` folder.
+
 ### Removed
-- **The room 06 dashboard.** The vault no longer has the `06 AI Team` room, so
-  its dashboard (the roster, open tasks, session logs and team activity) and
-  its styles are gone. Without this, every new vault would have said at each
-  start that room 06 is missing.
+- **The WiP dashboard (room 03).** Work in progress now happens with your AI
+  agents, outside the vault, and only finished work comes in, so ICOR for Life
+  3.0 has no `03 WiP`. Its dashboard is gone, and a vault without the room is
+  not told it is missing.
+- **The AI Team dashboard (old room 06).** The vault no longer has the
+  `06 AI Team` room, so its dashboard (the roster, open tasks, session logs and
+  team activity) and its styles are gone.
 
 ## [0.16.2] - 2026-11-02
 

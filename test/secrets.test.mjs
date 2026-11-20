@@ -907,9 +907,9 @@ test('0.17.0: a chosen path has no fallback, and the keychain backend is never a
 });
 
 test('0.17.0: room 06 is gone; the move\'s sentences name paths only and nothing in it logs', () => {
-  assert.doesNotMatch(source, /room: '06'/);
+  assert.doesNotMatch(source, /path: '06 AI Team'/, 'no room table entry for the retired room');
   assert.doesNotMatch(source, /renderTeam/);
-  assert.equal((source.match(/06 AI Team/g) || []).length, 2, 'only the legacy constant and the comment that explains it');
+  assert.equal((source.match(/'06 AI Team/g) || []).length, 2, 'as a string only in the legacy env path and the retired-folder guard');
   const block = source.slice(source.indexOf("the env file's move out of room 06 (0.17.0)"), source.indexOf('async trashLegacyEnvFile()') + 600);
   assert.doesNotMatch(block, /console\./);
   for (const m of block.matchAll(/' \+ ([A-Za-z_.]+) \+ '/g)) {

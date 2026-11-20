@@ -74,6 +74,23 @@ function strokeEl(parent, cls) {
 }
 
 /* "09 AUG 2026" — the Shelf's kicker date voice. */
+/* A source still in the reading queue: `consumed` is false (a checkbox, or
+   the word when a sync wrote it as text). Missing counts as read, so a note
+   without the field never nags. */
+function outerUnread(fm) {
+  const c = fm && fm.consumed;
+  return c === false || String(c).trim().toLowerCase() === 'false';
+}
+
+/* A source that links to something it serves. */
+function outerLinked(fm) {
+  const m = fm || {};
+  return ['projects', 'key_elements', 'topics'].some((k) => {
+    const v = m[k];
+    return Array.isArray(v) ? v.some((x) => String(x || '').trim()) : !!String(v || '').trim();
+  });
+}
+
 function kickerDate(v) {
   try {
     return new Date(v).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
@@ -130,13 +147,20 @@ const ROOM_VIEW_TYPE = 'micor-room-dash';
  * table's own copy already says so ("ROOM 01 - INBOX"). `path` is now a
  * DECLARATION of the shipped default, resolved against the vault's real folder
  * at load by `resolveRooms()`, so a room may be called anything its owner likes
- * - renamed, translated - and everything downstream keeps working. */
+ * - renamed, translated - and everything downstream keeps working.
+ *
+ * ICOR for Life 3.0 (0.17.0): work in progress happens in the agent harness,
+ * not in the vault, so room 03 is gone and only finished work comes in, as
+ * objects. Room 06 is the Outer World: what others made. A vault made before
+ * 3.0 has no Outer World, and some still have the retired `06 AI Team`, so
+ * the room is `optional` (its absence is not announced) and never binds to a
+ * folder named in `retired` (the number alone would claim the old room). */
 const ROOMS = [
   { room: '00', path: '00 Daily Scratchpad', key: 'scratchpad', title: 'The Scratchpad.', hand: 'raw thought, stamped later', kicker: 'ROOM 00 · DAILY SCRATCHPAD' },
   { room: '01', path: '01 Inbox', key: 'inbox', title: 'The Inbox.', hand: 'it empties, always', kicker: 'ROOM 01 · INBOX' },
-  { room: '03', path: '03 WiP', key: 'wip', title: 'The Bench.', hand: 'work in progress', kicker: 'ROOM 03 · WIP' },
   { room: '04', path: '04 Inner World', key: 'inner', title: 'The Inner World.', hand: 'what you know and live', kicker: 'ROOM 04 · INNER WORLD' },
   { room: '05', path: '05 Assets', key: 'assets', title: 'The Shelves.', hand: 'files your notes lean on', kicker: 'ROOM 05 · ASSETS' },
+  { room: '06', path: '06 Outer World', key: 'outer', title: 'The Outer World.', hand: 'what others made', kicker: 'ROOM 06 · OUTER WORLD', optional: true, retired: ['06 AI Team'] },
 ];
 
 /* The leading room number of a folder name, or null when it carries none. */
@@ -146,11 +170,12 @@ function roomNumberOf(name) {
 }
 
 /** The vault's own name for a room, by number. Null when the vault has no such room. */
-function findRoomFolder(vault, number) {
+function findRoomFolder(vault, number, skip) {
   const root = vault && vault.getRoot ? vault.getRoot() : null;
   const children = (root && root.children) || [];
   for (const child of children) {
     if (child.children === undefined) continue;
+    if (skip && skip.includes(child.name)) continue;
     if (roomNumberOf(child.name) === number) return child.name;
   }
   return null;
@@ -1312,13 +1337,13 @@ class MyicorConnectPlugin extends Plugin {
   resolveRooms() {
     const missing = [];
     for (const room of ROOMS) {
-      const found = findRoomFolder(this.app.vault, room.room);
+      const found = findRoomFolder(this.app.vault, room.room, room.retired);
       if (found) room.path = found;
-      else missing.push(room.room);
+      else if (!room.optional) missing.push(room.room);
     }
     /* A vault with no numbered rooms at all is not a scaffold, and telling
      * somebody their plain vault is broken would be the louder wrong answer. */
-    if (missing.length === ROOMS.length) return;
+    if (missing.length === ROOMS.filter((r) => !r.optional).length) return;
     if (missing.length === 0) return;
     const message = 'ICOR for Life - Connect: this vault has no room ' + missing.join(', ')
       + '. Those dashboards and their folder buttons are unavailable until the rooms are there.';
@@ -2995,9 +3020,9 @@ class RoomDashboardView extends ItemView {
     const fn = {
       scratchpad: () => this.renderScratchpad(body),
       inbox: () => this.renderInbox(body),
-      wip: () => this.renderWip(body),
       inner: () => this.renderInner(body),
       assets: () => this.renderAssets(body),
+      outer: () => this.renderOuter(body),
     }[room.key];
     fn && fn();
 
@@ -3103,49 +3128,6 @@ class RoomDashboardView extends ItemView {
     this.fileRows(arch, this.recent(archived, 5), { empty: 'processed captures will land here' });
   }
 
-  /* ------------------------------------------------------------- 02 wip -- */
-
-  renderWip(body) {
-    const root = this.plugin.app.vault.getAbstractFileByPath(this.room);
-    const folders = ((root && root.children) || []).filter((c) => c.children && c.name !== '_archive');
-    const archiveFolder = ((root && root.children) || []).find((c) => c.children && c.name === '_archive');
-    const archivedCount = archiveFolder ? archiveFolder.children.filter((c) => c.children).length : 0;
-    const benches = folders.map((dir) => {
-      const files = this.plugin.app.vault.getFiles().filter((f) => f.path.startsWith(dir.path + '/'));
-      const last = files.length ? Math.max(...files.map((f) => f.stat.mtime)) : 0;
-      return { dir, files, last };
-    }).sort((a, b) => b.last - a.last);
-    const stale = benches.filter((b) => b.last && this.daysAgo(b.last) > 14);
-
-    const band = this.slabBand(body);
-    this.slab(band, benches.length, null, 'on the bench');
-    this.slab(band, stale.length, null, 'stale over 14 days', stale.length > 0);
-    this.slab(band, archivedCount, null, 'finished and archived');
-    this.slab(band, this.files().length, null, 'files in play');
-
-    const sec = this.sect(body, 'ON THE BENCH', benches.length ? null : undefined);
-    if (!benches.length) {
-      sec.createDiv({ cls: 'micor-hand-note', text: 'the bench is clear — start something' });
-    } else {
-      const list = sec.createDiv({ cls: 'micor-gap-list' });
-      for (const b of benches) {
-        const row = list.createDiv({ cls: 'micor-hit is-clickable micor-room-row' });
-        const parts = [b.files.length + ' FILE' + (b.files.length === 1 ? '' : 'S')];
-        if (b.last) parts.push('TOUCHED ' + this.ageText(b.last));
-        if (b.last && this.daysAgo(b.last) > 14) parts.push('STALE');
-        row.createDiv({ cls: 'micor-hit-kicker', text: parts.join(' · ') });
-        row.createDiv({ cls: 'micor-hit-title', text: b.dir.name });
-        row.addEventListener('click', () => {
-          const newest = b.files.sort((x, y) => y.stat.mtime - x.stat.mtime)[0];
-          if (newest) this.openFile(newest);
-        });
-      }
-    }
-
-    const latest = this.sect(body, 'RECENTLY TOUCHED');
-    this.fileRows(latest, this.recent(this.notes(), 6), { empty: 'no work files yet' });
-  }
-
   /* ----------------------------------------------------- 03 inner world -- */
 
   renderInner(body) {
@@ -3245,6 +3227,52 @@ class RoomDashboardView extends ItemView {
       title: (f) => f.name,
     });
   }
+
+  /* ----------------------------------------------------- 06 outer world -- */
+
+  /* One note per thing someone else made (`type: source`), from the Web
+   * Clipper, Readwise or by hand. The fields are the vault schema's:
+   * source_type, author, consumed, captured, and the links that give a
+   * source its place (projects, key_elements, topics). */
+  renderOuter(body) {
+    const notes = this.notes();
+    const sources = notes.filter((f) => this.fm(f).type === 'source');
+    const unread = sources.filter((f) => outerUnread(this.fm(f)));
+    const unlinked = sources.filter((f) => !outerLinked(this.fm(f)));
+    const now = new Date();
+    const thisMonth = sources.filter((f) => {
+      const c = this.fm(f).captured;
+      const d = c ? new Date(String(c)) : new Date(f.stat.ctime || f.stat.mtime);
+      return !isNaN(d) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    });
+    const kicker = (f) => {
+      const m = this.fm(f);
+      const parts = [String(m.source_type || 'source').toUpperCase()];
+      if (m.author) parts.push(String(m.author).replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1').toUpperCase());
+      parts.push(this.ageText(f.stat.mtime));
+      return parts.join(' · ');
+    };
+
+    const band = this.slabBand(body);
+    this.slab(band, sources.length, null, 'sources');
+    this.slab(band, unread.length, null, 'in the reading queue', unread.length > 0);
+    this.slab(band, thisMonth.length, null, 'captured this month');
+    this.slab(band, sources.length - unlinked.length, '/ ' + sources.length, 'linked to what they serve');
+
+    const qsec = this.sect(body, 'THE READING QUEUE');
+    this.fileRows(qsec, this.recent(unread, 8), { empty: 'nothing waiting to be read', kicker });
+
+    const usec = this.sect(body, 'NOT CONNECTED YET', unlinked.length
+      ? 'A source earns its place by linking to a project, a Key Element or a topic.'
+      : null);
+    this.fileRows(usec, this.recent(unlinked, 5), { empty: 'every source links to what it serves', kicker });
+
+    const latest = this.sect(body, 'LATEST ARRIVALS');
+    this.fileRows(latest, this.recent(sources.length ? sources : notes, 6), {
+      empty: 'clips from the Web Clipper and highlights from Readwise land here',
+      kicker,
+    });
+  }
 }
 
 module.exports = MyicorConnectPlugin;
@@ -3258,6 +3286,9 @@ Object.assign(module.exports, {
   /* The Overview's numbers and the view that renders them, exported for
      test/loop-percent.test.mjs. */
   loopPercent, coursesClosed, DashboardView,
+  /* The room table and the Outer World's two field readers, exported for
+     test/rooms.test.mjs. */
+  ROOMS, outerUnread, outerLinked,
   /* The room views, exported for test/scratchpad-capture-count.test.mjs. */
   RoomDashboardView,
 });
