@@ -1,3 +1,7 @@
 # OAuth token store - never in git (hard rule 9)
 data.json
 .DS_Store
+# An ICOR for Life vault's shared keys file (.icor-for-life/.env) and any
+# other env file: OAuth tokens and API keys, never in git or a release
+.env
+.icor-for-life/

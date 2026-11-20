@@ -67,10 +67,18 @@ Measured against the shipped `main.js` of v0.8.2:
 
 **Authentication.** The plugin performs an OAuth flow against `app.myicor.com`. The
 callback is received on a **loopback listener on `127.0.0.1`**, which is the
-standard pattern for a native client. The resulting token is stored in Obsidian's
-per-plugin `data.json` inside the vault, at
-`.obsidian/plugins/icor-for-life-connect/data.json`. That file is git-ignored in this
-repository and the token is sent to no host other than `app.myicor.com`.
+standard pattern for a native client. Since 0.15.0 the two tokens live in the
+backend a setting chooses: Obsidian's keychain (`app.secretStorage`, outside the
+vault), or an env file inside the vault, by default `.icor-for-life/.env` (since
+0.17.0; before that `06 AI Team/AI Team Knowledge/.env`). The env file sits in the
+vault's hidden system folder, which Obsidian does not index, so it is read and
+written through the vault adapter only. While the new file is missing and the old
+one exists, the old one is read and written; the plugin offers once to copy it to
+the new place and never deletes it without the member's click. While the env file
+is the backend in use, its path is added to the vault's `.gitignore`. The
+per-plugin `data.json` keeps scope and expiry only. Neither file is in this
+repository (both are git-ignored here), and a token is sent to no host other than
+`app.myicor.com`.
 
 **Where it connects.** The only remote host referenced in the shipped bundle is
 `app.myicor.com`, plus the `127.0.0.1` loopback used for the OAuth callback. There

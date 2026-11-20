@@ -82,6 +82,7 @@ class FakeSetting {
       text: '', click: null,
       setButtonText(t) { this.text = t; return this; },
       setCta() { return this; },
+      setWarning() { this.warning = true; return this; },
       onClick(fn) { this.click = fn; return this; },
     };
     this.buttons.push(b); cb(b); return this;
@@ -104,10 +105,12 @@ function fakeSecretStorage(initial = {}) {
 function fakeAdapter(files = {}) {
   const map = new Map(Object.entries(files));
   return {
-    map, writes: [],
-    async exists(p) { return map.has(p); },
+    map, writes: [], made: [], trashed: [],
+    async exists(p) { return map.has(p) || this.made.includes(p) || [...map.keys()].some((k) => k.startsWith(p + '/')); },
     async read(p) { return map.get(p); },
     async write(p, t) { this.writes.push(p); map.set(p, t); },
+    async mkdir(p) { this.made.push(p); },
+    async trashSystem(p) { this.trashed.push(p); map.delete(p); return true; },
   };
 }
 
@@ -279,7 +282,8 @@ test('secret ids: the plugin prefix, the API alphabet, at most 64 characters; en
     assert.ok(f.id.length <= 64);
     assert.match(f.env, /^[A-Z_][A-Z0-9_]*$/);
   }
-  assert.equal(M.DEFAULT_ENV_FILE_PATH, '06 AI Team/AI Team Knowledge/.env');
+  assert.equal(M.DEFAULT_ENV_FILE_PATH, '.icor-for-life/.env');
+  assert.equal(M.LEGACY_ENV_FILE_PATH, '06 AI Team/AI Team Knowledge/.env');
 });
 
 test('splitPlaintextTokens and persistableData: the two tokens leave, scope and expiry stay, nothing else moves', () => {
@@ -789,4 +793,126 @@ test('Flint 1 and 3: the tab and the README say when the env file follows the va
   assert.doesNotMatch(readme, /in every backup and sync of the vault/);
   assert.doesNotMatch(readme, /the connection follows the vault to every device;/);
   for (const text of [backend.desc, env.desc, readme]) assert.ok(!/[–—]/.test(text), 'no em or en dash');
+});
+
+/* ------------------------------ 7. THE MOVE OUT OF ROOM 06 (0.17.0) -- */
+/* The vault no longer has `06 AI Team`. The shared keys file moved to the
+   vault's system folder, `.icor-for-life/.env`, which Obsidian does not
+   index, so it is reached through the vault adapter only. Existing vaults
+   keep working; the copy is offered once and is never a delete. */
+
+const NEW_ENV = '.icor-for-life/.env';
+const OLD_ENV = '06 AI Team/AI Team Knowledge/.env';
+const OLD_BYTES = '# keys for the team\r\nMYICOR_ACCESS_TOKEN=' + FIX_ACCESS + '\r\nMYICOR_REFRESH_TOKEN=' + FIX_REFRESH + '\r\nOPENAI_API_KEY=sk-not-real\r\n';
+
+test('0.17.0: the old default in data.json reads as the new one, a chosen path is kept, a bad one falls back', () => {
+  const { M } = makePlugin();
+  for (const v of [undefined, null, '', OLD_ENV, ' ' + OLD_ENV + ' ', NEW_ENV, './.icor-for-life/.env', '../x/.env', '/abs/.env']) {
+    assert.equal(M.adoptEnvFilePath(v), NEW_ENV, JSON.stringify(v));
+  }
+  assert.equal(M.adoptEnvFilePath('keys/.env'), 'keys/.env');
+  assert.equal(M.legacyEnvFileFor(NEW_ENV), OLD_ENV);
+  assert.equal(M.legacyEnvFileFor('keys/.env'), '');
+});
+
+test('0.17.0: a vault with only the old file stays connected, writes go to the old file, and the move is offered once', async () => {
+  const h = makePlugin({ data: { secretsBackend: 'env-file', envFilePath: OLD_ENV }, files: { [OLD_ENV]: OLD_BYTES, '.gitignore': '' } });
+  const { plugin, adapter, saves, notices } = h;
+  await plugin.initSecrets();
+  assert.equal(plugin.data.envFilePath, NEW_ENV, 'data.json now names the new place');
+  assert.ok(plugin.isConnected(), 'the tokens are read from the old file');
+  assert.equal(plugin.tokens.refresh_token, FIX_REFRESH);
+  assert.equal(plugin.data.envMoveOffered, true);
+  assert.equal(saves[saves.length - 1].envMoveOffered, true, 'the flag is on disk');
+  const offers = notices.filter((n) => n.includes('still read from the old file'));
+  assert.equal(offers.length, 1, 'asked once');
+  assert.ok(offers[0].includes(OLD_ENV) && offers[0].includes(NEW_ENV));
+  const gi = adapter.map.get('.gitignore').split('\n');
+  assert.ok(gi.includes(NEW_ENV) && gi.includes(OLD_ENV), 'both the file in use and the new place are git-ignored');
+  assert.ok(!adapter.map.has(NEW_ENV), 'nothing is copied without the member');
+  /* A token refresh writes into the file in use, not a new one beside it. */
+  plugin.storeTokens({ access_token: 'at-refreshed', refresh_token: FIX_REFRESH, expires_in: 900 });
+  await plugin.saveTokens();
+  assert.ok(!adapter.map.has(NEW_ENV), 'no half-empty new file');
+  assert.ok(adapter.map.get(OLD_ENV).includes('MYICOR_ACCESS_TOKEN=at-refreshed\r\n'), 'the old file took the write, CRLF kept');
+  assert.ok(adapter.map.get(OLD_ENV).includes('OPENAI_API_KEY=sk-not-real'), 'and every other line');
+  /* A second load asks nothing. */
+  const before = notices.length;
+  await plugin.initSecrets();
+  assert.equal(notices.filter((n, i) => i >= before && n.includes('still read from the old file')).length, 0);
+  assertNoLeak(h, ['at-refreshed', 'sk-not-real']);
+});
+
+test('0.17.0: the copy is byte for byte, makes the system folder, keeps the old file, and the trash waits for a click and the new file', async () => {
+  const h = makePlugin({ data: { secretsBackend: 'env-file' }, files: { [OLD_ENV]: OLD_BYTES, '.gitignore': '' } });
+  const { plugin, adapter, notices } = h;
+  await plugin.initSecrets();
+  const store = plugin.secretsBackendFor('env-file');
+  assert.equal(await store.trashLegacy(), false, 'never while the old file is the only copy');
+  assert.deepEqual(adapter.trashed, []);
+  assert.equal(await plugin.moveEnvFileFromLegacy(), 'moved');
+  assert.equal(adapter.map.get(NEW_ENV), OLD_BYTES, 'byte for byte');
+  assert.equal(adapter.map.get(OLD_ENV), OLD_BYTES, 'the old file is untouched');
+  assert.deepEqual(adapter.made, ['.icor-for-life']);
+  assert.ok(plugin.isConnected());
+  assert.equal(await plugin.moveEnvFileFromLegacy(), 'already', 'asked twice, copied once');
+  assert.deepEqual(clone(await store.locate()), { active: NEW_ENV, onLegacy: false, legacyExists: true });
+  /* The tab: the trash row appears and acts only on its button. */
+  const { rows, tab } = await renderTab(h);
+  tab.display = () => {};
+  const row = rows.find((r) => r.name === 'Old keys file');
+  assert.ok(row, 'the row is there while the old copy is');
+  assert.match(row.desc, /is in use\. The old copy is still at /);
+  assert.deepEqual(adapter.trashed, [], 'rendering trashes nothing');
+  await row.buttons[0].click();
+  assert.deepEqual(adapter.trashed, [OLD_ENV], 'the old path, nothing else');
+  assert.equal(adapter.map.get(NEW_ENV), OLD_BYTES);
+  assert.ok(!(await renderTab(h)).rows.find((r) => r.name === 'Old keys file'), 'no row once the old file is gone');
+  assertNoLeak(h, ['sk-not-real']);
+  for (const n of notices) assert.ok(!/[–—]/.test(n));
+});
+
+test('0.17.0: the tab offers the copy while the old file is in use, and a fresh vault writes straight to the new place', async () => {
+  const h = makePlugin({ data: { secretsBackend: 'env-file', envMoveOffered: true }, files: { [OLD_ENV]: OLD_BYTES } });
+  await h.plugin.initSecrets();
+  assert.equal(h.notices.filter((n) => n.includes('still read from the old file')).length, 0, 'already asked in an earlier load');
+  const { rows, tab } = await renderTab(h);
+  tab.display = () => {};
+  const row = rows.find((r) => r.name === 'Old keys file');
+  assert.match(row.desc, /Your keys are still in 06 AI Team\/AI Team Knowledge\/\.env/);
+  await row.buttons[0].click();
+  assert.equal(h.adapter.map.get(NEW_ENV), OLD_BYTES);
+  assertNoLeak(h, ['sk-not-real']);
+
+  const f = makePlugin({ data: { secretsBackend: 'env-file' }, files: {} });
+  await f.plugin.initSecrets();
+  f.plugin.storeTokens({ access_token: FIX_ACCESS, refresh_token: FIX_REFRESH, expires_in: 900 });
+  await f.plugin.saveTokens();
+  assert.deepEqual(f.adapter.made, ['.icor-for-life'], 'the system folder is made for the first write');
+  assert.ok(f.adapter.map.get(NEW_ENV).includes('MYICOR_REFRESH_TOKEN=' + FIX_REFRESH));
+  assert.ok(!f.adapter.map.has(OLD_ENV));
+  assert.ok(!(await renderTab(f)).rows.find((r) => r.name === 'Old keys file'), 'no old file, no row');
+  assertNoLeak(f);
+});
+
+test('0.17.0: a chosen path has no fallback, and the keychain backend is never asked about the old file', async () => {
+  const h = makePlugin({ data: { secretsBackend: 'env-file', envFilePath: 'keys/.env' }, files: { [OLD_ENV]: OLD_BYTES } });
+  await h.plugin.initSecrets();
+  assert.ok(!h.plugin.isConnected(), 'the old file is not read for a path the member chose');
+  assert.equal(h.notices.filter((n) => n.includes('old file')).length, 0);
+  const k = makePlugin({ secretStorage: fakeSecretStorage(), files: { [OLD_ENV]: OLD_BYTES } });
+  await k.plugin.initSecrets();
+  assert.equal(k.notices.filter((n) => n.includes('old file')).length, 0);
+  assert.ok(!(await renderTab(k)).rows.find((r) => r.name === 'Old keys file'));
+});
+
+test('0.17.0: room 06 is gone; the move\'s sentences name paths only and nothing in it logs', () => {
+  assert.doesNotMatch(source, /room: '06'/);
+  assert.doesNotMatch(source, /renderTeam/);
+  assert.equal((source.match(/06 AI Team/g) || []).length, 2, 'only the legacy constant and the comment that explains it');
+  const block = source.slice(source.indexOf("the env file's move out of room 06 (0.17.0)"), source.indexOf('async trashLegacyEnvFile()') + 600);
+  assert.doesNotMatch(block, /console\./);
+  for (const m of block.matchAll(/' \+ ([A-Za-z_.]+) \+ '/g)) {
+    assert.ok(['LEGACY_ENV_FILE_PATH', 'DEFAULT_ENV_FILE_PATH', 'store.path', 'store.fallback'].includes(m[1]), 'a Notice concatenates ' + m[1]);
+  }
 });

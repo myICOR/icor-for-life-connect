@@ -5,6 +5,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.15.0 are described by their release notes on GitHub.
 
+## [0.17.0] - 2026-11-20
+
+### Changed
+- **The env file's default place is `.icor-for-life/.env`.** The ICOR for Life
+  vault no longer has the `06 AI Team` room, so the keys file moved to the
+  vault's hidden system folder, the same file ICOR for Life - Planner and AI
+  Chat read. Obsidian does not index a folder whose name starts with a dot, so
+  Connect reads and writes it through the vault adapter only, as before. The
+  system folder is made on the first write when it is missing. This only
+  matters with the env file as the backend; where Obsidian's keychain exists it
+  is still the default.
+- **Existing vaults stay connected.** The old default path in `data.json` now
+  reads as the new one. While `.icor-for-life/.env` is missing and
+  `06 AI Team/AI Team Knowledge/.env` is there, Connect reads and writes the old
+  file. Once, at start, it offers to copy the file to the new place; the
+  settings tab keeps an "Old keys file" row with the same button. The copy is
+  byte for byte and is read back before it is used. The old file is never
+  deleted by itself: once the new file exists, the same row offers to move the
+  old one to the trash.
+- While the old file is the one in use, the vault's `.gitignore` covers both it
+  and the new place. No value is ever logged or shown; every new sentence names
+  paths only.
+
+### Removed
+- **The room 06 dashboard.** The vault no longer has the `06 AI Team` room, so
+  its dashboard (the roster, open tasks, session logs and team activity) and
+  its styles are gone. Without this, every new vault would have said at each
+  start that room 06 is missing.
+
 ## [0.16.2] - 2026-11-02
 
 ### Fixed

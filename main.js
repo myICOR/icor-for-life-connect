@@ -48,7 +48,7 @@ const AUTH_TIMEOUT_MS = 5 * 60 * 1000;
 const REFLECTIONS_ROOM = '04';
 const REFLECTIONS_SUBDIR = 'ICOR Journey Notes';
 
-/* The myICOR infinity mark (from 06 AI Team/AI Team Knowledge/Brand/). */
+/* The myICOR infinity mark (the same drawing as the INKLINE brand mark). */
 const MARK_SVG =
   '<svg viewBox="0 0 240 110" fill="none" xmlns="http://www.w3.org/2000/svg">' +
   '<path d="M50 55 C50 18 92 18 120 55 C148 92 190 92 190 55 C190 18 148 18 120 55 C92 92 50 92 50 55 Z" ' +
@@ -137,7 +137,6 @@ const ROOMS = [
   { room: '03', path: '03 WiP', key: 'wip', title: 'The Bench.', hand: 'work in progress', kicker: 'ROOM 03 · WIP' },
   { room: '04', path: '04 Inner World', key: 'inner', title: 'The Inner World.', hand: 'what you know and live', kicker: 'ROOM 04 · INNER WORLD' },
   { room: '05', path: '05 Assets', key: 'assets', title: 'The Shelves.', hand: 'files your notes lean on', kicker: 'ROOM 05 · ASSETS' },
-  { room: '06', path: '06 AI Team', key: 'team', title: 'The Team.', hand: 'who did what, and how', kicker: 'ROOM 06 · AI TEAM' },
 ];
 
 /* The leading room number of a folder name, or null when it carries none. */
@@ -273,14 +272,28 @@ function callbackHtml(ok, detail) {
  *                     carry it. The store is shared by every plugin, which
  *                     is why every id carries this plugin's prefix.
  *   'env-file'        KEY=value lines in a file inside the vault, default
- *                     `06 AI Team/AI Team Knowledge/.env`. Rides with the
- *                     vault, so a sync that carries hidden files takes it
- *                     along (iCloud Drive, git and Dropbox do; Obsidian
- *                     Sync skips files whose name starts with a dot, and
- *                     the default name does). The plugin adds the path to
- *                     .gitignore the way it always did for data.json. The
- *                     path is vault-relative and checked: no absolute
- *                     path, no `..`, so it cannot leave the vault.
+ *                     `.icor-for-life/.env` (0.17.0): the vault's own
+ *                     system folder, one file shared with ICOR for Life -
+ *                     Planner and AI Chat. Obsidian does not index a
+ *                     folder whose name starts with a dot, so the file is
+ *                     read and written through the vault adapter only,
+ *                     never the Vault API. Rides with the vault, so a sync
+ *                     that carries hidden files takes it along (iCloud
+ *                     Drive, git and Dropbox do; Obsidian Sync skips files
+ *                     whose name starts with a dot, and the default name
+ *                     does). The plugin adds the path to .gitignore the
+ *                     way it always did for data.json. The path is
+ *                     vault-relative and checked: no absolute path, no
+ *                     `..`, so it cannot leave the vault.
+ *
+ *                     Before 0.17.0 the default was
+ *                     `06 AI Team/AI Team Knowledge/.env`, in a room the
+ *                     vault no longer has. The old default in data.json
+ *                     reads as the new one; while the new file is missing
+ *                     and the old one is there, the old one is the file
+ *                     read and written (EnvFileBackend's fallback), the
+ *                     member is offered a one-time copy to the new place,
+ *                     and the old file is never deleted without a click.
  *
  * The default is the keychain when the API exists, else the env file, and
  * the choice is written to data.json the first time this build loads, so a
@@ -310,7 +323,8 @@ const SECRET_FIELDS = {
 };
 const SECRET_FIELD_NAMES = Object.keys(SECRET_FIELDS);
 const SECRETS_BACKENDS = ['secret-storage', 'env-file'];
-const DEFAULT_ENV_FILE_PATH = '06 AI Team/AI Team Knowledge/.env';
+const DEFAULT_ENV_FILE_PATH = '.icor-for-life/.env';
+const LEGACY_ENV_FILE_PATH = '06 AI Team/AI Team Knowledge/.env';
 const BACKEND_LABELS = {
   'secret-storage': "Obsidian's keychain",
   'env-file': 'the env file',
@@ -345,6 +359,18 @@ function normalizeEnvFilePath(v) {
   if (parts.some((p) => p === '..')) return { ok: false, path: '', error: 'The path must stay inside the vault (no "..").' };
   if (!parts.length) return { ok: false, path: '', error: 'Enter a file name, not a folder.' };
   return { ok: true, path: parts.join('/'), error: '' };
+}
+
+/* The path data.json names, adopted: checked, and the old default read as
+   the new one, because nobody chose it; every earlier build wrote it. */
+function adoptEnvFilePath(v) {
+  const p = normalizeEnvFilePath(v).path;
+  return !p || p === LEGACY_ENV_FILE_PATH ? DEFAULT_ENV_FILE_PATH : p;
+}
+
+/* The older file the default path falls back to; '' for a chosen path. */
+function legacyEnvFileFor(path) {
+  return path === DEFAULT_ENV_FILE_PATH ? LEGACY_ENV_FILE_PATH : '';
 }
 
 function envLineEnding(text) {
@@ -463,15 +489,41 @@ class KeychainBackend {
   }
 }
 
+/* The env file. `fallback` (0.17.0) is the old default's file: while the
+   file at `path` is missing and the fallback is there, the fallback is the
+   one read AND written, so a vault set up before the move keeps working and
+   no half-empty new file appears beside the full old one. Which file is in
+   use is asked again on every read and write, so a copy made meanwhile (by
+   this plugin or ICOR for Life - Planner) is followed at once. */
 class EnvFileBackend {
-  constructor(adapter, path) {
+  constructor(adapter, path, fallback) {
     this.adapter = adapter;
     this.path = path;
+    this.fallback = fallback === undefined ? legacyEnvFileFor(path) : (fallback || '');
+    if (this.fallback === this.path) this.fallback = '';
   }
   get name() { return 'env-file'; }
+  /* { active, onLegacy, legacyExists }: the file in use and whether it is
+     the old one. Never reads a byte of either file. */
+  async locate() {
+    if (!this.path) return { active: '', onLegacy: false, legacyExists: false };
+    const legacyExists = !!this.fallback && !!(await this.adapter.exists(this.fallback));
+    const onLegacy = legacyExists && !(await this.adapter.exists(this.path));
+    return { active: onLegacy ? this.fallback : this.path, onLegacy, legacyExists };
+  }
+  /* The folder a new file goes in, made when missing (the adapter's mkdir
+     makes every level). */
+  async ensureParent(p) {
+    const dir = p.indexOf('/') >= 0 ? p.slice(0, p.lastIndexOf('/')) : '';
+    if (!dir || typeof this.adapter.mkdir !== 'function') return;
+    if (await this.adapter.exists(dir)) return;
+    await this.adapter.mkdir(dir);
+  }
   async readText() {
-    if (!this.path || !(await this.adapter.exists(this.path))) return null;
-    return await this.adapter.read(this.path);
+    if (!this.path) return null;
+    const { active } = await this.locate();
+    if (!(await this.adapter.exists(active))) return null;
+    return await this.adapter.read(active);
   }
   async read() {
     const env = parseEnvFile((await this.readText()) || '');
@@ -481,6 +533,7 @@ class EnvFileBackend {
   }
   async write(values) {
     if (!this.path) throw new Error('no env file path is set');
+    const { active } = await this.locate();
     const current = await this.readText();
     let text = current || '';
     let any = false;
@@ -492,7 +545,31 @@ class EnvFileBackend {
     }
     /* Blanking keys in a file that does not exist creates nothing. */
     if (current == null && !any) return;
-    if (text !== current) await this.adapter.write(this.path, text);
+    if (current == null) await this.ensureParent(active);
+    if (text !== current) await this.adapter.write(active, text);
+  }
+  /* The one-time copy to the new place: the old bytes unchanged, read back
+     before they are trusted. The old file stays. 'moved', 'already' (the
+     new file exists), 'none' (no old file); throws on a failed copy, with a
+     message that carries no value. */
+  async adoptLegacy() {
+    if (!this.path || !this.fallback) return 'none';
+    if (await this.adapter.exists(this.path)) return 'already';
+    if (!(await this.adapter.exists(this.fallback))) return 'none';
+    const text = await this.adapter.read(this.fallback);
+    await this.ensureParent(this.path);
+    await this.adapter.write(this.path, text);
+    if ((await this.adapter.read(this.path)) !== text) throw new Error('the copy did not read back the same');
+    return 'moved';
+  }
+  /* The old copy to the trash (the system trash, else the vault's .trash),
+     only once the new file is there to read. True when it went. */
+  async trashLegacy() {
+    if (!this.path || !this.fallback) return false;
+    if (!(await this.adapter.exists(this.path)) || !(await this.adapter.exists(this.fallback))) return false;
+    if (typeof this.adapter.trashSystem === 'function' && (await this.adapter.trashSystem(this.fallback))) return true;
+    if (typeof this.adapter.trashLocal === 'function') { await this.adapter.trashLocal(this.fallback); return true; }
+    return false;
   }
 }
 
@@ -758,9 +835,10 @@ class MyicorConnectPlugin extends Plugin {
     return effectiveSecretsBackend(this.secretsBackendChoice(), this.app);
   }
   /* The path in use: the setting when it passes the check, else the
-     default. A stored value that fails the check never reaches the disk. */
+     default. A stored value that fails the check never reaches the disk,
+     and the old default reads as the new one (adoptEnvFilePath). */
   envFilePath() {
-    return normalizeEnvFilePath(this.data.envFilePath).path || DEFAULT_ENV_FILE_PATH;
+    return adoptEnvFilePath(this.data.envFilePath);
   }
   secretsBackendFor(name) {
     if (name === 'secret-storage') return new KeychainBackend(this.app.secretStorage);
@@ -781,12 +859,25 @@ class MyicorConnectPlugin extends Plugin {
       this.data.secretsBackend = defaultSecretsBackend(this.app);
       changed = true;
     }
-    const envPath = normalizeEnvFilePath(this.data.envFilePath).path || DEFAULT_ENV_FILE_PATH;
+    const envPath = adoptEnvFilePath(this.data.envFilePath);
     if (this.data.envFilePath !== envPath) {
       this.data.envFilePath = envPath;
       changed = true;
     }
     await this.ensureGitignore();
+    /* 0.17.0: a vault whose keys are still in the old file (room 06) is
+       asked once whether to copy it to the new place. The flag is saved
+       below before the question is shown, so it is never asked twice. */
+    let offerMove = false;
+    if (this.secretsBackend() === 'env-file' && this.data.envMoveOffered !== true) {
+      let at = null;
+      try { at = await this.secretsStore().locate(); } catch { at = null; }
+      if (at && at.onLegacy) {
+        this.data.envMoveOffered = true;
+        offerMove = true;
+        changed = true;
+      }
+    }
     const plain = splitPlaintextTokens(this.data.tokens);
     this.secretsUnmoved = false;
     if (plain) {
@@ -804,6 +895,49 @@ class MyicorConnectPlugin extends Plugin {
     }
     if (changed) await this.saveSettings();
     await this.loadTokens();
+    if (offerMove) this.offerEnvFileMove();
+  }
+
+  /* ---- the env file's move out of room 06 (0.17.0) ----
+     Asked once at load, and on offer in the settings tab while the old
+     file is the one in use. Every sentence names paths only. */
+  offerEnvFileMove() {
+    const text = 'myICOR: your keys are still read from the old file at ' + LEGACY_ENV_FILE_PATH + '. Their new place is ' + DEFAULT_ENV_FILE_PATH + '.';
+    if (typeof createFragment !== 'function') {
+      new Notice(text + ' The ICOR for Life - Connect settings have a button to copy them there.', 30000);
+      return;
+    }
+    const frag = createFragment((f) => {
+      f.createDiv({ text });
+      const b = f.createEl('button', { text: 'Copy them there' });
+      b.addEventListener('click', () => { this.moveEnvFileFromLegacy(); });
+    });
+    new Notice(frag, 30000);
+  }
+
+  /* Copy the old file to the default place and read it from there. The old
+     file stays; the Notice says where. */
+  async moveEnvFileFromLegacy() {
+    const store = this.secretsBackendFor('env-file');
+    let r = 'failed';
+    try { r = await store.adoptLegacy(); } catch { r = 'failed'; }
+    if (r === 'moved') {
+      await this.ensureGitignore();
+      await this.loadTokens();
+      this.refreshExplorerDot();
+      new Notice('myICOR: copied your keys file to ' + store.path + ' and reads it from there now. The old file is still at ' + store.fallback + '; the ICOR for Life - Connect settings can put it in the trash once nothing else reads it.', 15000);
+    } else if (r === 'already') new Notice('myICOR: ' + store.path + ' is already there and is the file in use.');
+    else if (r === 'none') new Notice('myICOR: there is no old keys file to copy.');
+    else new Notice('myICOR: the keys file could not be copied to ' + store.path + '. Nothing was removed; the old file is still in use.', 12000);
+    return r;
+  }
+
+  async trashLegacyEnvFile() {
+    const store = this.secretsBackendFor('env-file');
+    let gone = false;
+    try { gone = await store.trashLegacy(); } catch { gone = false; }
+    new Notice(gone ? 'myICOR: moved the old keys file at ' + store.fallback + ' to the trash.' : 'myICOR: the old keys file at ' + store.fallback + ' was not moved to the trash.');
+    return gone;
   }
 
   /* this.tokens from the selected backend plus data.json's scope and expiry.
@@ -1651,7 +1785,13 @@ class MyicorConnectPlugin extends Plugin {
        backend in use; data.json always, for the builds before 0.15.0 that
        wrote tokens into it. */
     const lines = [this.app.vault.configDir + '/plugins/' + this.manifest.id + '/data.json'];
-    if (this.secretsBackend() === 'env-file') lines.push(this.envFilePath());
+    if (this.secretsBackend() === 'env-file') {
+      lines.push(this.envFilePath());
+      /* While the old file (room 06) is the one in use, it is covered too. */
+      let at = null;
+      try { at = await this.secretsStore().locate(); } catch { at = null; }
+      if (at && at.onLegacy && !lines.includes(at.active)) lines.push(at.active);
+    }
     let gi = '';
     if (await adapter.exists('.gitignore')) gi = await adapter.read('.gitignore');
     const have = new Set(gi.split('\n').map((l) => l.trim()));
@@ -1724,7 +1864,8 @@ class MyicorConnectSettingTab extends PluginSettingTab {
        with the reason and the setting keeps its last good value. */
     new Setting(el)
       .setName('Env file')
-      .setDesc('Vault-relative path to a file of key=value lines; a line starting with # is a comment. Read only while the env file is the backend in use.')
+      .setDesc('Vault-relative path to a file of key=value lines; a line starting with # is a comment. Read only while the env file is the backend in use. '
+        + 'Blank means ' + DEFAULT_ENV_FILE_PATH + ', in the vault\'s hidden system folder (Obsidian\'s file list does not show a folder whose name starts with a dot), the same file ICOR for Life - Planner and AI Chat read.')
       .addText((t) => {
         t.setPlaceholder(DEFAULT_ENV_FILE_PATH)
           .setValue(plugin.data.envFilePath === DEFAULT_ENV_FILE_PATH ? '' : (plugin.data.envFilePath || ''));
@@ -1748,6 +1889,32 @@ class MyicorConnectSettingTab extends PluginSettingTab {
           this.display();
         });
       });
+
+    /* The old keys file (0.17.0): while it is the one in use, a row offers
+       the copy to the default place; once the new file is there and the old
+       one still is, a row offers to put the old one in the trash. Both act
+       only on a click, and both name paths, never a line of the file. */
+    if (backend === 'env-file') {
+      const store = plugin.secretsBackendFor('env-file');
+      let at = null;
+      try { at = await store.locate(); } catch { at = null; }
+      if (at && at.legacyExists) {
+        const row = new Setting(el).setName('Old keys file');
+        if (at.onLegacy) {
+          row.setDesc('Your keys are still in ' + store.fallback + ', a room this vault no longer needs. Copy the file to ' + store.path + ', the new place ICOR for Life tools read it from. The old file stays until you remove it.')
+            .addButton((b) => b.setButtonText('Copy to the new place').setCta().onClick(async () => {
+              await plugin.moveEnvFileFromLegacy();
+              this.display();
+            }));
+        } else {
+          row.setDesc(store.path + ' is in use. The old copy is still at ' + store.fallback + ', with the keys it held when it was copied. Put it in the trash once no other tool reads it.')
+            .addButton((b) => b.setButtonText('Move old file to trash').setWarning().onClick(async () => {
+              await plugin.trashLegacyEnvFile();
+              this.display();
+            }));
+        }
+      }
+    }
 
     const where = await plugin.secretLocations();
     for (const field of SECRET_FIELD_NAMES) {
@@ -2831,7 +2998,6 @@ class RoomDashboardView extends ItemView {
       wip: () => this.renderWip(body),
       inner: () => this.renderInner(body),
       assets: () => this.renderAssets(body),
-      team: () => this.renderTeam(body),
     }[room.key];
     fn && fn();
 
@@ -3079,98 +3245,13 @@ class RoomDashboardView extends ItemView {
       title: (f) => f.name,
     });
   }
-
-  /* --------------------------------------------------------- 05 ai team -- */
-
-  renderTeam(body) {
-    const agentsRoot = this.plugin.app.vault.getAbstractFileByPath(this.room + '/Agents');
-    const agents = ((agentsRoot && agentsRoot.children) || []).filter((c) => c.children);
-    const kb = 'AI Team Knowledge';
-    const open = this.notes(kb + '/Tasks/open');
-    const inProgress = this.notes(kb + '/Tasks/in-progress');
-    const done = this.notes(kb + '/Tasks/done');
-    const now = new Date();
-    const monthPath = this.room + '/' + kb + '/Tasks/done/' + now.getFullYear() + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/';
-    const doneThisMonth = done.filter((f) => f.path.startsWith(monthPath));
-    const sops = this.notes(kb + '/SOPs');
-    const workstreams = this.notes(kb + '/Workstreams');
-    const guidelines = this.notes(kb + '/Guidelines');
-    const logs = this.notes(kb + '/Session Logs');
-    const journals = agents.flatMap((a) =>
-      this.plugin.app.vault.getFiles().filter((f) => f.path.startsWith(a.path + '/Journal/') && f.extension === 'md'));
-
-    const band = this.slabBand(body);
-    this.slab(band, open.length, null, 'tasks open', open.length > 0);
-    this.slab(band, inProgress.length, null, 'in progress');
-    this.slab(band, doneThisMonth.length, '/ ' + done.length, 'done this month');
-    this.slab(band, agents.length, null, 'agents on the roster');
-    this.slab(band, sops.length + workstreams.length + guidelines.length, null, 'sops, workstreams, guidelines');
-    this.slab(band, logs.length, null, 'session logs');
-
-    const rsec = this.sect(body, 'THE ROSTER', 'Who is on the team, and what each of them does.');
-    const col = rsec.createDiv({ cls: 'micor-roster' });
-    const ordered = [...agents].sort((a, b) =>
-      (a.name === 'Larry' ? -1 : b.name === 'Larry' ? 1 : a.name.localeCompare(b.name)));
-    for (const a of ordered) {
-      const agentMd = this.plugin.app.vault.getAbstractFileByPath(a.path + '/AGENT.md');
-      const cache = agentMd ? this.plugin.app.metadataCache.getFileCache(agentMd) : null;
-      const fm = (cache && cache.frontmatter) || {};
-      const row = col.createDiv({ cls: 'micor-roster-row' });
-      const av = row.createDiv({ cls: 'micor-roster-avatar' });
-      const avatarFile = this.plugin.app.vault.getAbstractFileByPath(
-        this.room + '/AI Team Knowledge/Avatars/' + a.name.toLowerCase() + '.png');
-      if (avatarFile) {
-        const img = av.createEl('img');
-        img.src = this.plugin.app.vault.getResourcePath(avatarFile);
-        img.alt = a.name;
-      } else {
-        av.createSpan({ cls: 'micor-roster-initial', text: (fm.name || a.name).slice(0, 1).toUpperCase() });
-      }
-      const txt = row.createDiv({ cls: 'micor-roster-text' });
-      const head = txt.createDiv({ cls: 'micor-roster-head' });
-      head.createSpan({ cls: 'micor-roster-name', text: fm.name || a.name });
-      if (fm.role) head.createSpan({ cls: 'micor-roster-role', text: fm.role });
-      const desc = txt.createDiv({ cls: 'micor-roster-desc' });
-      if (agentMd) {
-        this.plugin.app.vault.cachedRead(agentMd).then((s) => {
-          const m = /## Mission\s*\n+([\s\S]*?)(?=\n#|\n---|$)/.exec(s);
-          if (m && desc.isConnected !== false) {
-            desc.setText(m[1].trim().replace(/\s+/g, ' ')
-              .replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1'));
-          }
-        }).catch(() => {});
-        row.addEventListener('click', () =>
-          this.plugin.app.workspace.getLeaf('tab').openFile(agentMd));
-      }
-    }
-
-    const tsec = this.sect(body, 'OPEN TASKS', open.length
-      ? 'What the team owes. Ask Larry to pick one up.'
-      : null);
-    this.fileRows(tsec, this.recent(open, 8), {
-      empty: 'no open tasks — the board is clean',
-      title: (f) => f.basename.replace(/^(tsk-)?\d{4}-\d{2}-\d{2}-?\d*-?/, '').replace(/-/g, ' ') || f.basename,
-    });
-
-    const lsec = this.sect(body, 'RECENT SESSION LOGS');
-    this.fileRows(lsec, this.recent(logs, 5), { empty: 'session logs land here after every session' });
-
-    const perf = this.sect(body, 'TEAM ACTIVITY');
-    const recentJournals = this.recent(journals, 5);
-    this.fileRows(perf, recentJournals, {
-      empty: 'agent journals appear as the team works',
-      kicker: (f) => {
-        const agent = f.path.split('/')[2] || '';
-        return agent.toUpperCase() + ' · ' + this.ageText(f.stat.mtime);
-      },
-    });
-  }
 }
 
 module.exports = MyicorConnectPlugin;
 /* The pure secrets layer, exported for test/secrets.test.mjs. */
 Object.assign(module.exports, {
-  SECRET_ID_PREFIX, SECRET_FIELDS, SECRETS_BACKENDS, DEFAULT_ENV_FILE_PATH, BACKEND_LABELS,
+  SECRET_ID_PREFIX, SECRET_FIELDS, SECRETS_BACKENDS, DEFAULT_ENV_FILE_PATH, LEGACY_ENV_FILE_PATH, BACKEND_LABELS,
+  adoptEnvFilePath, legacyEnvFileFor,
   secretStorageUsable, defaultSecretsBackend, effectiveSecretsBackend,
   parseEnvFile, upsertEnvLine, normalizeEnvFilePath, splitPlaintextTokens, persistableData,
   KeychainBackend, EnvFileBackend, secretStatusText, MyicorConnectSettingTab,
