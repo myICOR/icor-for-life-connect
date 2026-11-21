@@ -29,6 +29,10 @@ Releases before 0.15.0 are described by their release notes on GitHub.
   paths only.
 
 ### Fixed
+- **Keys stay in Obsidian's keychain.** Connect now needs Obsidian 1.11.4 or
+  newer, the first with Obsidian's own keychain. On older versions it used to keep keys in
+  plain text without saying so. The env file is still there for a member who
+  chooses it in settings.
 - **No more random sign-outs.** The dashboard makes several calls at once;
   with an expired sign-in each refreshed it with the same one-time refresh
   token, the server refused all but the first, and any refusal signed you
