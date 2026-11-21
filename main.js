@@ -1619,30 +1619,60 @@ class MyicorConnectPlugin extends Plugin {
     };
   }
 
+  /* One refresh at a time. The dashboard makes several calls at once; with an
+   * expired access token each used to refresh with the same refresh token,
+   * and the server rotates it, so all but the first were refused and the
+   * member was signed out at random. Every caller now waits on the one
+   * refresh in flight. */
   async ensureToken() {
     if (!this.tokens) throw new Error('not connected');
     if (this.tokens.access_token && Date.now() < this.tokens.expires_at) return this.tokens.access_token;
+    if (!this.refreshing) {
+      this.refreshing = this.refreshTokens().finally(() => { this.refreshing = null; });
+    }
+    return this.refreshing;
+  }
 
-    const resp = await requestUrl({
-      url: TOKEN_URL,
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'refresh_token',
-        refresh_token: this.tokens.refresh_token,
-      }),
-      throw: false,
-    });
-    if (resp.status !== 200 || !resp.json.access_token) {
+  /* The connection is dropped only when the server says the refresh token is
+   * no good (OAuth's invalid_grant, or a 400/401 with no reason). A busy
+   * server, a rate limit or no network keeps it, and the call says to try
+   * again: a passing hiccup must not sign anyone out. */
+  async refreshTokens() {
+    const sent = this.tokens.refresh_token;
+    let resp;
+    try {
+      resp = await requestUrl({
+        url: TOKEN_URL,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: sent }),
+        throw: false,
+      });
+    } catch (e) {
+      throw new Error('myICOR could not be reached. You are still connected; try again in a moment.');
+    }
+    let body = null;
+    try { body = resp.json; } catch (e) { body = null; }
+    if (resp.status === 200 && body && body.access_token) {
+      if (!this.tokens || this.tokens.refresh_token !== sent) {
+        /* signed out (or reconnected) while the refresh was on its way */
+        if (!this.tokens) throw new Error('not connected');
+        return this.tokens.access_token;
+      }
+      this.storeTokens(body); /* rotation: the refresh token is replaced */
+      await this.saveTokens();
+      return this.tokens.access_token;
+    }
+    const reason = body && typeof body.error === 'string' ? body.error : '';
+    const rejected = reason === 'invalid_grant' || ((resp.status === 400 || resp.status === 401) && !reason);
+    if (rejected) {
       /* Refresh token revoked or expired: drop to disconnected cleanly. */
       this.tokens = null;
       await this.saveTokens();
       this.refreshExplorerDot();
       throw new Error('session expired, please reconnect');
     }
-    this.storeTokens(resp.json); /* rotation: the refresh token is replaced */
-    await this.saveTokens();
-    return this.tokens.access_token;
+    throw new Error('myICOR did not answer just now (' + resp.status + '). You are still connected; try again in a moment.');
   }
 
   async disconnect() {
