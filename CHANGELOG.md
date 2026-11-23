@@ -65,6 +65,18 @@ Releases before 0.15.0 are described by their release notes on GitHub.
   and the new place. No value is ever logged or shown; every new sentence names
   paths only.
 
+### Fixed
+- **Keys stay in Obsidian's keychain.** Connect now needs Obsidian 1.11.4 or
+  newer, the first with Obsidian's own keychain. On older versions it used to keep keys in
+  plain text without saying so. The env file is still there for a member who
+  chooses it in settings.
+- **No more random sign-outs.** The dashboard makes several calls at once;
+  with an expired sign-in each refreshed it with the same one-time refresh
+  token, the server refused all but the first, and any refusal signed you
+  out. Calls now share one refresh. Connect also signs you out only when
+  myICOR says the sign-in is no longer valid: a busy server, a rate limit or
+  no network keeps you connected and asks you to try again.
+
 ### Added
 - **The Outer World dashboard (room 06).** ICOR for Life 3.0 has a room for
   what others made: one note per book, article, video, podcast, post or paper
