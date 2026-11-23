@@ -75,7 +75,7 @@ update for at least 6 months, and that "If your project diverges from
 existing options, it should not be a fork. Start fresh with a new repository
 and your own code." So a project that diverges from this plugin ships under
 its own plugin id and its own name, never `icor-for-life-connect` or
-"ICOR for Life - Connect": the id is unique to this entry and its Owner, the
+"ICOR Connect": the id is unique to this entry and its Owner, the
 name is covered by `TRADEMARK.md`, and the MIT licence grants you the code,
 not the listing and not the name.
 

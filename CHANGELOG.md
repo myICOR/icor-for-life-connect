@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.15.0 are described by their release notes on GitHub.
 
+## [0.18.3] - 2026-11-23
+
+### Changed
+- The display name is now ICOR Connect (it was ICOR for Life - Connect). The plugin id stays `icor-for-life-connect`, so installed vaults, settings and hotkeys carry on unchanged.
+
 ## [0.18.2] - 2026-11-23
 
 ### Changed

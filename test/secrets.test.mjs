@@ -748,7 +748,7 @@ test('C-2: typing keys/.env into the env path field touches nothing per keystrok
   const gi = adapter.map.get('.gitignore');
   const lines = gi.split('\n');
   assert.equal(lines.filter((l) => l === 'keys/.env').length, 1, 'exactly one line for the settled path');
-  assert.equal(lines.filter((l) => l.startsWith('# ICOR for Life - Connect')).length, 2, 'one block from load (the default path), one from the settled value');
+  assert.equal(lines.filter((l) => l.startsWith('# ICOR Connect')).length, 2, 'one block from load (the default path), one from the settled value');
   for (const partial of ['k', 'ke', 'key', 'keys', 'keys/', 'keys/.', 'keys/.e', 'keys/.en']) assert.ok(!lines.includes(partial), 'no half-typed path: ' + partial);
 
   /* The same value settled again (a second blur) appends nothing. */

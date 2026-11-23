@@ -1,5 +1,5 @@
 /*
- * ICOR for Life - Connect: the Obsidian plugin for ICOR for Life.
+ * ICOR Connect: the Obsidian plugin for ICOR for Life.
  *
  * What it does:
  *   1. Adds a myICOR button at the bottom of the folder tree (file explorer).
@@ -1033,7 +1033,7 @@ class MyicorConnectPlugin extends Plugin {
   offerEnvFileMove() {
     const text = 'myICOR: your keys are still read from the old file at ' + LEGACY_ENV_FILE_PATH + '. Their new place is ' + DEFAULT_ENV_FILE_PATH + '.';
     if (typeof createFragment !== 'function') {
-      new Notice(text + ' The ICOR for Life - Connect settings have a button to copy them there.', 30000);
+      new Notice(text + ' The ICOR Connect settings have a button to copy them there.', 30000);
       return;
     }
     const frag = createFragment((f) => {
@@ -1054,7 +1054,7 @@ class MyicorConnectPlugin extends Plugin {
       await this.ensureGitignore();
       await this.loadTokens();
       this.refreshExplorerDot();
-      new Notice('myICOR: copied your keys file to ' + store.path + ' and reads it from there now. The old file is still at ' + store.fallback + '; the ICOR for Life - Connect settings can put it in the trash once nothing else reads it.', 15000);
+      new Notice('myICOR: copied your keys file to ' + store.path + ' and reads it from there now. The old file is still at ' + store.fallback + '; the ICOR Connect settings can put it in the trash once nothing else reads it.', 15000);
     } else if (r === 'already') new Notice('myICOR: ' + store.path + ' is already there and is the file in use.');
     else if (r === 'none') new Notice('myICOR: there is no old keys file to copy.');
     else new Notice('myICOR: the keys file could not be copied to ' + store.path + '. Nothing was removed; the old file is still in use.', 12000);
@@ -1398,7 +1398,7 @@ class MyicorConnectPlugin extends Plugin {
      * answer. */
     if (missing.length === FOLDERS.filter((f) => !f.optional).length) return;
     if (missing.length === 0) return;
-    const message = 'ICOR for Life - Connect: this vault has no ' + missing.join(', ') + ' folder'
+    const message = 'ICOR Connect: this vault has no ' + missing.join(', ') + ' folder'
       + (missing.length === 1 ? '. Its dashboard and folder button are' : 's. Their dashboards and folder buttons are')
       + ' unavailable until the folder' + (missing.length === 1 ? ' is' : 's are') + ' there.';
     console.warn(message);
@@ -1946,7 +1946,7 @@ class MyicorConnectPlugin extends Plugin {
     const sep = gi === '' || gi.endsWith('\n') ? '' : '\n';
     await adapter.write(
       '.gitignore',
-      gi + sep + '\n# ICOR for Life - Connect token store (hard rule 9: secrets never reach git)\n' + missing.join('\n') + '\n'
+      gi + sep + '\n# ICOR Connect token store (hard rule 9: secrets never reach git)\n' + missing.join('\n') + '\n'
     );
   }
 }

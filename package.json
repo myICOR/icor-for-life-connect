@@ -1,6 +1,6 @@
 {
   "name": "icor-for-life-connect",
-  "version": "0.18.2",
+  "version": "0.18.3",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.mjs"

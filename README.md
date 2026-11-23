@@ -1,4 +1,4 @@
-# ICOR for Life - Connect
+# ICOR Connect
 
 **Your myICOR membership, next to your notes.**
 
