@@ -714,33 +714,31 @@ class MyicorConnectPlugin extends Plugin {
     this.registerView(VIEW_TYPE, (leaf) => new DashboardView(leaf, this));
     this.registerView(ROOM_VIEW_TYPE, (leaf) => new RoomDashboardView(leaf, this));
 
-    /* The thin ribbon is hidden by the scaffold's own snippet, so this
-     * plugin registers NO ribbon action: an icon on a hidden surface is
-     * not an entry point. Its routes are the top row (gear, attachTopButtons),
-     * the folder-tree footer button, and this command. The terminal used to
-     * live in that top row too; it is ICOR for Life - Terminal's own toolbar
-     * entry now, under the ICOR for Life logo in the left side panel, so it
-     * is not this plugin's route to guard any more. The four vault actions
-     * below are palette commands for the same reason - see the block after
-     * this one. */
+    /* THE ENTRY POINT IS OBSIDIAN'S OWN RIBBON (Tom, 2026-11-23): every
+     * plugin's launcher lives in the ribbon on the left, where a member can
+     * reorder or hide it in Settings, Appearance, Ribbon menu. One icon, the
+     * dashboard, with the same words and the same function as the command.
+     * The folder-tree footer button and the top row's gear stay; Obsidian
+     * removes the ribbon icon on unload. */
     this.addCommand({
       id: 'open-dashboard',
       name: 'Open myICOR dashboard',
       callback: () => this.activateDashboard(),
     });
+    this.addRibbonIcon('gauge', 'Open myICOR dashboard', () => this.activateDashboard());
 
     /* THE FOUR VAULT ACTIONS THAT USED TO BE TOOLBAR BUTTONS.
      *
-     * They were injected into the file explorer's tool-button row while the
-     * left ribbon was hidden and that row was where homeless controls went.
-     * The row is now reduced to actions that are actually ON the file tree,
-     * and none of these four is one: they create notes and canvases and open
-     * the graph, which are actions on the VAULT.
+     * Up to 0.18.0 they were also buttons in the file explorer's tool-button
+     * row. That row now holds only Obsidian's own controls (Tom, 2026-11-23),
+     * and none of these four is a file-tree action anyway: they create notes
+     * and canvases and open the graph, which are actions on the VAULT.
      *
-     * They become commands rather than rail stops, because the rail is for
-     * plugin entry points and these are not entry points into anything. A
-     * command is the discoverable home for a vault action anyway, and it is
-     * hotkey-bindable for free.
+     * They are commands rather than ribbon icons, because the ribbon is for
+     * plugin entry points and these are not entry points into anything, and
+     * Obsidian's own Daily notes, Unique note creator, Canvas and Graph view
+     * plugins already put their icons there. A command is the discoverable
+     * home for a vault action, and it is hotkey-bindable for free.
      *
      * All four, and the evenness is the ruling rather than an oversight.
      * Three of them delegate to core plugins that carry their own palette
@@ -748,12 +746,7 @@ class MyicorConnectPlugin extends Plugin {
      * DISABLED, at which point its command does not exist and the function
      * has no route and no explanation. These wrappers survive that and say
      * which plugin to turn on. Registering three of four would leave the
-     * fourth as the odd one out, which is a shape nobody would choose.
-     *
-     * All four are ALSO toolbar buttons again, by explicit request:
-     * `attachToolbarButtons` reinstates them as a second route. Each
-     * button drives its command by id, so there is one implementation
-     * with two surfaces and no way for them to disagree. */
+     * fourth as the odd one out, which is a shape nobody would choose. */
     const runCore = (id, missing) => {
       if (!this.app.commands.executeCommandById(id)) new Notice('myICOR: ' + missing);
     };
@@ -886,14 +879,14 @@ class MyicorConnectPlugin extends Plugin {
     for (const row of document.querySelectorAll('.micor-tree-slot')) {
       row.classList.remove('micor-tree-slot', 'micor-can-collapse');
     }
-    /* Every class here but the last is LIVE - folder buttons, top buttons,
-       and the four vault-action buttons back on the explorer toolbar - and
-       their nodes come off on the way out like anything else this plugin
-       owns. Only `.micor-toolbar-extra` is RETIRED: it was the shared class
-       of the old canvas and graph buttons, which came back under their own
-       classes, so nothing creates it any more. Its sweep outlives the code
-       that made it on purpose, because an in-place upgrade from a build
-       that still injected it leaves the nodes behind with nothing left to
+    /* The folder buttons, the top buttons and the banner are LIVE, and their
+       nodes come off on the way out like anything else this plugin owns.
+       The rest are RETIRED: the four vault-action buttons this plugin put
+       into the explorer's tool-button row up to 0.18.0, and
+       `.micor-toolbar-extra`, the shared class of an older canvas and graph
+       button. Nothing creates them any more. Their sweep outlives the code
+       that made them on purpose, because an in-place upgrade from a build
+       that still injected them leaves the nodes behind with nothing left to
        take them out. */
     for (const el of document.querySelectorAll('.micor-room-btn, .micor-top-btn, .micor-unique-note, .micor-daily-note, .micor-new-canvas, .micor-graph-view, .micor-banner, .micor-toolbar-extra')) el.remove();
     this.sweepRetiredRail();
@@ -1342,64 +1335,13 @@ class MyicorConnectPlugin extends Plugin {
     this.explorerButtonEl = footer;
   }
 
-  /* The explorer toolbar's four vault-action buttons: today's daily note,
-   * the unique-note creator, a new scratchpad canvas, and the graph view,
-   * in that order at the start of the row, ahead of the host's file-tree
-   * survivors. Reinstated by explicit request after a round as palette-only
-   * commands. The commands STAY: each button drives its command by id, so
-   * there is one implementation with two surfaces, and the command's own
-   * Notice still names the core plugin to enable when that plugin is off.
-   *
-   * The canvas and graph buttons carry their own classes now. The old
-   * build gave both one shared class, and that class stays on the RETIRED
-   * sweep list below to clean up in-place upgrades from that build; a
-   * class cannot be both swept as retired and created as live, so the
-   * revived pair could not inherit it.
-   *
-   * This runs from the attach pass the explorer observer re-triggers, so
-   * the guard below is load-bearing: when the buttons are already present
-   * it must return WITHOUT touching the DOM. A callback that mutates
-   * unconditionally under a MutationObserver feeds itself; that runaway has
-   * blanked this window once already. */
-  attachToolbarButtons() {
-    const bar = document.querySelector('.workspace-leaf-content[data-type="file-explorer"] .nav-buttons-container');
-    if (!bar || bar.querySelector('.micor-unique-note')) return;
-
-    const runOwn = (suffix) => this.app.commands.executeCommandById(this.manifest.id + ':' + suffix);
-
-    const unique = createDiv({ cls: 'clickable-icon nav-action-button micor-unique-note', attr: { 'aria-label': 'New unique note' } });
-    setIcon(unique, 'file-clock');
-    unique.addEventListener('click', () => runOwn('new-unique-note'));
-
-    const daily = createDiv({ cls: 'clickable-icon nav-action-button micor-daily-note', attr: { 'aria-label': "Open today's daily note" } });
-    setIcon(daily, 'calendar-check');
-    daily.addEventListener('click', () => runOwn('open-daily-note'));
-
-    const canvas = createDiv({ cls: 'clickable-icon nav-action-button micor-new-canvas', attr: { 'aria-label': 'New canvas in Daily Notes' } });
-    setIcon(canvas, 'layout-dashboard');
-    canvas.addEventListener('click', () => runOwn('new-scratchpad-canvas'));
-
-    const graph = createDiv({ cls: 'clickable-icon nav-action-button micor-graph-view', attr: { 'aria-label': 'Open graph view' } });
-    setIcon(graph, 'git-fork');
-    graph.addEventListener('click', () => runOwn('open-graph-view'));
-
-    /* Daily leftmost, then unique, canvas, graph: the order the row used
-     * to read. The theme assigns flex order only to sort and collapse and
-     * leaves zero for the rest, so plain insertion at the front is
-     * placement enough. */
-    bar.insertBefore(graph, bar.firstChild);
-    bar.insertBefore(canvas, graph);
-    bar.insertBefore(unique, canvas);
-    bar.insertBefore(daily, unique);
-  }
-
   /* The settings gear lives alone in the right sidebar's top row now
    * (the left header stays stock - injecting there raced Obsidian's own
    * sidebar toggle and shuffled the order on collapse/reopen). This row
    * used to also carry a terminal shortcut wired to the retired
    * third-party Terminal plugin; the terminal is ICOR for Life - Terminal
-   * now, launched from its own toolbar entry under the ICOR for Life logo
-   * in the left side panel, so this method does not touch it any more. */
+   * now, launched from its own icon in the ribbon on the left, so this
+   * method does not touch it any more. */
   attachTopButtons() {
     const right = document.querySelector('.workspace-split.mod-right-split .workspace-tab-header-container');
     if (!right || right.querySelector('.micor-top-settings')) return;
@@ -1453,7 +1395,6 @@ class MyicorConnectPlugin extends Plugin {
   }
 
   attachRoomButtons() {
-    this.attachToolbarButtons();
     this.attachTopButtons();
     for (const folder of FOLDERS) {
       const title = document.querySelector('.nav-folder-title[data-path="' + folder.path + '"]');
