@@ -626,7 +626,7 @@ class KeychainBackend {
    one read AND written, so a vault set up before the move keeps working and
    no half-empty new file appears beside the full old one. Which file is in
    use is asked again on every read and write, so a copy made meanwhile (by
-   this plugin or ICOR for Life - Planner) is followed at once. */
+   this plugin or ICOR Planner) is followed at once. */
 class EnvFileBackend {
   constructor(adapter, path, fallback) {
     this.adapter = adapter;
@@ -1364,7 +1364,7 @@ class MyicorConnectPlugin extends Plugin {
    * (the left header stays stock - injecting there raced Obsidian's own
    * sidebar toggle and shuffled the order on collapse/reopen). This row
    * used to also carry a terminal shortcut wired to the retired
-   * third-party Terminal plugin; the terminal is ICOR for Life - Terminal
+   * third-party Terminal plugin; the terminal is ICOR Terminal
    * now, launched from its own icon in the ribbon on the left, so this
    * method does not touch it any more. */
   attachTopButtons() {
@@ -2011,7 +2011,7 @@ class MyicorConnectSettingTab extends PluginSettingTab {
     new Setting(el)
       .setName('Env file')
       .setDesc('Vault-relative path to a file of key=value lines; a line starting with # is a comment. Read only while the env file is the backend in use. '
-        + 'Blank means ' + DEFAULT_ENV_FILE_PATH + ', in the vault\'s hidden system folder (Obsidian\'s file list does not show a folder whose name starts with a dot), the same file ICOR for Life - Planner and AI Chat read.')
+        + 'Blank means ' + DEFAULT_ENV_FILE_PATH + ', in the vault\'s hidden system folder (Obsidian\'s file list does not show a folder whose name starts with a dot), the same file ICOR Planner and AI Chat read.')
       .addText((t) => {
         t.setPlaceholder(DEFAULT_ENV_FILE_PATH)
           .setValue(plugin.data.envFilePath === DEFAULT_ENV_FILE_PATH ? '' : (plugin.data.envFilePath || ''));
@@ -2761,7 +2761,7 @@ class RoomDashboardView extends ItemView {
       outer: () => this.renderOuter(body),
       assets: () => this.renderAssets(body),
       databases: () => this.renderPlain(body, { what: 'files', empty: 'Objects.base and data too large for notes live here' }),
-      planner: () => this.renderPlain(body, { what: 'notes', empty: 'tasks from your task apps land here through ICOR for Life - Planner' }),
+      planner: () => this.renderPlain(body, { what: 'notes', empty: 'tasks from your task apps land here through ICOR Planner' }),
     }[folder.key];
     fn && fn();
 

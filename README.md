@@ -66,7 +66,7 @@ the vault to every device you sync. Pick the one that matches how you work;
 the setting explains both in plain words before you choose.
 
 If you choose the file, it is `.icor-for-life/.env`, in the vault's hidden
-system folder, the same file ICOR for Life - Planner and AI Chat use. Obsidian's
+system folder, the same file ICOR Planner and AI Chat use. Obsidian's
 file list does not show that folder. A vault that still keeps the file in its
 old place stays connected: Connect reads it there, and offers once to copy it
 to the new place. The old file stays until you remove it.
