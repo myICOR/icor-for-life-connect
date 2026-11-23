@@ -24,7 +24,13 @@ where you actually are on the Journey without opening a browser.
 2. Click the **myICOR** button at the bottom of the file explorer and connect
    your account. The dot next to the button shows the connection state.
 
-That is the setup. Your dashboard opens from the same button.
+That is the setup. Your dashboard opens from the same button, or from the
+gauge icon in the ribbon on the left (move or hide it in Settings,
+Appearance, Ribbon menu).
+
+Today's daily note, a new unique note, a new canvas in `00 Daily Notes` and
+the graph view are commands: run them from the command palette or give them
+a hotkey.
 
 ## What you get
 

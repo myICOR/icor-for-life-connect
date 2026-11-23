@@ -49,6 +49,7 @@ function loadPlugin({ existing = [] } = {}) {
     Plugin: class {
       constructor(app, manifest) { this.app = app; this.manifest = manifest; }
       addCommand(cmd) { commands.set(cmd.id, cmd); }
+      addRibbonIcon() { return {}; }
       addSettingTab() {}
       registerView() {}
       registerEvent() {}

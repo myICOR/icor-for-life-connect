@@ -5,6 +5,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.15.0 are described by their release notes on GitHub.
 
+## [0.18.2] - 2026-11-23
+
+### Changed
+- **The myICOR dashboard has an icon in the ribbon on the left.** The gauge
+  opens it, like the **myICOR** button at the bottom of the file explorer and
+  **Open myICOR dashboard** in the command palette. Like any ribbon icon, you
+  can move or hide it in Settings, Appearance, Ribbon menu.
+
+### Removed
+- **The four icons under the logo.** Today's daily note, New unique note, New
+  canvas in Daily Notes and Open graph view no longer sit in the file
+  explorer's row of icons (Tom, 2026-11-23: every plugin's launcher moves to
+  Obsidian's own ribbon). All four stay as commands, and Obsidian's own Daily
+  notes, Unique note creator, Canvas and Graph view plugins have ribbon icons
+  of their own. An update while Obsidian is open takes the old icons away.
+
 ## [0.18.1] - 2026-11-23
 
 Ready for the Obsidian community directory's review.
