@@ -157,7 +157,7 @@ function view(M, { lessons, wired = true, sync } = {}) {
   const calls = [];
   const plugin = {
     data: { reflectionSync: sync || null },
-    reflectionsDir: () => '04 Inner World/ICOR Journey Notes',
+    reflectionsDir: () => '02 Inner World/ICOR Journey Notes',
     isClaudeWired: async () => wired,
     mcpCall: async (name, args) => { calls.push([name, args]); return lessons || { lessons: [] }; },
     isConnected: () => true,
@@ -235,7 +235,7 @@ test('the page: the reflections sync and the knowledge search stay one click awa
   await refl.querySelector('.micor-btn').click();
   await settle();
   assert.equal(synced, 1);
-  assert.match(refl.querySelector('.micor-row-sub').textContent, /^7 in 04 Inner World\/ICOR Journey Notes · last sync /);
+  assert.match(refl.querySelector('.micor-row-sub').textContent, /^7 in 02 Inner World\/ICOR Journey Notes · last sync /);
   assert.equal(notices.pop(), 'myICOR: 2 new reflections synced.');
   let page = null;
   v.setPage = (p) => { page = p; };

@@ -1,18 +1,18 @@
 /* THE SCRATCHPAD CAPTURE COUNT GATE.
  *
- * The room 00 dashboard shows "daily notes" and "quick captures" side by
- * side. The capture count accepted fourteen bare digits and nothing else, a
- * shape the scaffold never writes: a quick capture is named
+ * The 00 Daily Notes dashboard shows "daily notes" and "quick captures" side
+ * by side. The capture count accepted fourteen bare digits and nothing else, a
+ * shape the vault never writes: a quick capture is named
  * YYYY-MM-DD-HHmmss (Obsidian's Unique note creator, which the plugin's own
  * new-note button runs), the older YYYYMMDDHHmm shape is still accepted, and
  * each carries its tool's collision suffix. So the slab read 0 in every vault
  * that follows the naming rule while the daily-note count beside it was right
  * (issue #3).
  *
- * Behaviour through renderScratchpad on the real RoomDashboardView class over
+ * Behaviour through renderDaily on the real RoomDashboardView class over
  * the fake DOM, so the number is measured where the member reads it, not on
- * a regex alone. The file names are invented; the shapes are the scaffold
- * validator's.
+ * a regex alone. The file names are invented; the shapes are the vault
+ * validator's. 0.18.0: the folder is 00 Daily Notes (ICOR for Life 3.0).
  */
 
 import test from 'node:test';
@@ -29,8 +29,8 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const source = readFileSync(resolve(repo, 'main.js'), 'utf8');
 const nodeRequire = createRequire(import.meta.url);
 
-const ROOM = '00 Daily Scratchpad';
-const MONTH = ROOM + '/2026/03';
+const DAILY = '00 Daily Notes';
+const MONTH = DAILY + '/2026/03';
 
 function loadPlugin() {
   const obsidian = {
@@ -68,7 +68,7 @@ function loadPlugin() {
   return sandbox.module.exports;
 }
 
-/* A TFile with the fields the room view reads: path, name, basename,
+/* A TFile with the fields the folder view reads: path, name, basename,
    extension, stat. Nothing is stamped, so every note is "waiting". */
 function file(path) {
   const name = path.slice(path.lastIndexOf('/') + 1);
@@ -81,7 +81,7 @@ function file(path) {
   };
 }
 
-/* Renders room 00 over the given files and reads the slab band back as
+/* Renders 00 Daily Notes over the given files and reads the slab band back as
    { label: number }, the way the member reads it. */
 function slabs(paths) {
   const exported = loadPlugin();
@@ -95,7 +95,7 @@ function slabs(paths) {
   };
   const view = new exported.RoomDashboardView({}, plugin);
   const body = view.contentEl.createDiv({ cls: 'micor-page' });
-  view.renderScratchpad(body);
+  view.renderDaily(body);
   const out = {};
   for (const slab of body.querySelectorAll('.micor-slab')) {
     out[slab.querySelector('span').textContent] = Number(slab.querySelector('b').textContent);
@@ -107,7 +107,7 @@ function slabs(paths) {
 
 test('captures named YYYY-MM-DD-HHmmss are counted, with the -N collision suffix', () => {
   const s = slabs([
-    ROOM + '/README.md',
+    DAILY + '/README.md',
     MONTH + '/2026-03-04.md',
     MONTH + '/2026-03-05.md',
     MONTH + '/2026-03-05-080232.md',
@@ -139,7 +139,7 @@ test('the fourteen-digit YYYYMMDDHHmmss shape keeps counting, so no existing cou
 
 test('a daily note, a subject note, a canvas and the README are not captures', () => {
   const s = slabs([
-    ROOM + '/README.md',
+    DAILY + '/README.md',
     MONTH + '/2026-03-05.md',
     MONTH + '/Untitled.md',
     MONTH + '/Untitled 2.md',
@@ -152,7 +152,7 @@ test('a daily note, a subject note, a canvas and the README are not captures', (
 
 test('all three shapes add up, and the counts beside them are untouched', () => {
   const s = slabs([
-    ROOM + '/README.md',
+    DAILY + '/README.md',
     MONTH + '/2026-03-03.md',
     MONTH + '/2026-03-04.md',
     MONTH + '/2026-03-05.md',

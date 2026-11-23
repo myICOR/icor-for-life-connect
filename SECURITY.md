@@ -80,6 +80,14 @@ per-plugin `data.json` keeps scope and expiry only. Neither file is in this
 repository (both are git-ignored here), and a token is sent to no host other than
 `app.myicor.com`.
 
+**What it writes in the vault.** Synced reflections go into `ICOR Journey Notes`
+inside the Inner World folder the vault has: `02 Inner World` in ICOR for Life 3.0
+(since 0.18.0), `04 Inner World` in an older vault. The canvas command writes into
+`00 Daily Notes/YYYY/MM/` (`00 Daily Scratchpad/` in an older vault). Folders are
+matched by their full name, never by their number prefix. The vault-root
+`.mcp.json` receives the myICOR server URL, and `.gitignore` the paths of `data.json`
+and the env file.
+
 **Where it connects.** The only remote host referenced in the shipped bundle is
 `app.myicor.com`, plus the `127.0.0.1` loopback used for the OAuth callback. There
 is no telemetry and no analytics.

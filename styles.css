@@ -927,9 +927,9 @@
 .micor-gap-list > div { border-top: 1px solid var(--micor-hairline-subtle); }
 .micor-gap-list > div:last-child { border-bottom: 1px solid var(--micor-hairline-subtle); }
 
-/* ================= v0.6 — room dashboards =============================== */
+/* ================= v0.6 — folder dashboards ============================= */
 
-/* the hover icon on room folder rows */
+/* the hover icon on the folder rows (the class keeps its old name) */
 .nav-folder-title:has(.micor-room-btn) { position: relative; padding-right: 30px; }
 .micor-room-btn {
   position: absolute;
@@ -951,7 +951,56 @@
 .nav-folder-title:hover .micor-room-btn { opacity: 1; }
 .micor-room-btn:hover { color: var(--ink-marker, #ff5a2d); }
 
-/* room pages reuse the shelf grammar; small deltas only */
+/* folders by ICOR stage (0.18.0): INKLINE's stage colours, one dot per stage;
+   Refine has no folder, so no colour, only its line */
+.micor-stage-input { --micor-stage: #5271FC; }
+.micor-stage-control { --micor-stage: #52F49A; }
+.micor-stage-output { --micor-stage: #FD63FF; }
+.micor-stages {
+  display: grid;
+  gap: 6px;
+  margin: 4px 0 18px;
+  padding: 10px 0;
+  border-top: 1px solid var(--micor-hairline-subtle);
+  border-bottom: 1px solid var(--micor-hairline-subtle);
+}
+.micor-stage { display: grid; grid-template-columns: 84px 1fr; align-items: baseline; gap: 10px; }
+.micor-stage-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--micor-body);
+  font-size: 12px;
+  color: var(--micor-dim);
+}
+.micor-stage-label::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--micor-stage, transparent);
+  box-shadow: inset 0 0 0 1px var(--micor-hairline);
+}
+.micor-stage-folders { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
+.micor-dash button.micor-stage-folder {
+  appearance: none;
+  height: auto;
+  padding: 2px 8px;
+  border: 1px solid var(--micor-hairline-subtle);
+  border-radius: var(--ink-radius-control, 4px);
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--micor-body);
+  font-size: 12px;
+  color: var(--micor-paper);
+  cursor: pointer;
+}
+.micor-dash button.micor-stage-folder:hover { border-color: var(--micor-stage, var(--micor-hairline)); }
+.micor-dash button.micor-stage-folder.is-current { border-color: var(--micor-stage, var(--micor-hairline)); background: var(--micor-wash); cursor: default; }
+.micor-dash button.micor-stage-folder.is-missing { color: var(--micor-faint); border-style: dashed; cursor: default; }
+.micor-stage-about { font-family: var(--micor-body); font-size: 12px; color: var(--micor-faint); }
+
+/* folder pages reuse the shelf grammar; small deltas only */
 .micor-room-slabs { margin-top: 14px; }
 .micor-room-row .micor-hit-title::after { display: none; }
 .micor-kicker-ok { color: var(--micor-success); }

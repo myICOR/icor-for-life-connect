@@ -795,7 +795,7 @@ test('Flint 1 and 3: the tab and the README say when the env file follows the va
   for (const text of [backend.desc, env.desc, readme]) assert.ok(!/[–—]/.test(text), 'no em or en dash');
 });
 
-/* ------------------------------ 7. THE MOVE OUT OF ROOM 06 (0.17.0) -- */
+/* ------------------ 7. THE MOVE OUT OF THE 2.x 06 AI TEAM FOLDER (0.17.0) -- */
 /* The vault no longer has `06 AI Team`. The shared keys file moved to the
    vault's system folder, `.icor-for-life/.env`, which Obsidian does not
    index, so it is reached through the vault adapter only. Existing vaults
@@ -906,11 +906,13 @@ test('0.17.0: a chosen path has no fallback, and the keychain backend is never a
   assert.ok(!(await renderTab(k)).rows.find((r) => r.name === 'Old keys file'));
 });
 
-test('0.17.0: room 06 is gone; the move\'s sentences name paths only and nothing in it logs', () => {
-  assert.doesNotMatch(source, /path: '06 AI Team'/, 'no room table entry for the retired room');
+test('0.17.0: the 2.x 06 AI Team folder is gone; the move\'s sentences name paths only and nothing in it logs', () => {
+  assert.doesNotMatch(source, /path: '06 AI Team'|legacy: \[[^\]]*'06 AI Team/, 'no folder table entry for the retired folder');
   assert.doesNotMatch(source, /renderTeam/);
-  assert.equal((source.match(/'06 AI Team/g) || []).length, 2, 'as a string only in the legacy env path and the retired-folder guard');
-  const block = source.slice(source.indexOf("the env file's move out of room 06 (0.17.0)"), source.indexOf('async trashLegacyEnvFile()') + 600);
+  assert.equal((source.match(/'06 AI Team/g) || []).length, 1, 'as a string only in the legacy env path (0.18.0: folders bind by full name, so no retired-folder guard is needed)');
+  const start = source.indexOf("the env file's move out of the 2.x `06 AI Team` folder (0.17.0)");
+  assert.ok(start > 0, 'the move block is where this gate looks for it');
+  const block = source.slice(start, source.indexOf('async trashLegacyEnvFile()') + 600);
   assert.doesNotMatch(block, /console\./);
   for (const m of block.matchAll(/' \+ ([A-Za-z_.]+) \+ '/g)) {
     assert.ok(['LEGACY_ENV_FILE_PATH', 'DEFAULT_ENV_FILE_PATH', 'store.path', 'store.fallback'].includes(m[1]), 'a Notice concatenates ' + m[1]);

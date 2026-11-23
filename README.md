@@ -38,7 +38,16 @@ share it. Your mentions, events and the week's poll open on app.myicor.com.
 the vault.
 
 **Your reflections as notes.** They sync into your vault as ordinary notes
-that you own.
+that you own, in `02 Inner World/ICOR Journey Notes` (`04 Inner World/` in a
+vault made before ICOR for Life 3.0).
+
+**A dashboard for every folder.** Hover a folder and click the gauge. Each
+dashboard counts what is in the folder, computed live from the vault, and
+opens with your folders grouped by ICOR stage: Input (`00 Daily Notes`,
+`01 Inbox`), Control (`02 Inner World`, `03 Outer World`, `04 Assets`,
+`05 Databases`) and Output (`06 Planner`). Refine has no folder: the AI and
+the plugins refine from outside, and so does your weekly review. A vault made
+before 3.0 keeps its dashboards under its old folder names.
 
 **Courses and lessons**, reachable without a browser tab.
 
@@ -60,7 +69,9 @@ to the new place. The old file stays until you remove it.
 
 - **Talks to app.myicor.com** to fetch your own membership data. That is the
   point of the plugin, and it is the only place it connects to.
-- **Writes your reflections into your vault** as notes you own.
+- **Writes your reflections into your vault** as notes you own, in
+  `02 Inner World/ICOR Journey Notes`, and a new canvas into
+  `00 Daily Notes/YYYY/MM/` when you ask for one.
 - **Stores your connection keys** where the setting above says.
 
 ## Good to know

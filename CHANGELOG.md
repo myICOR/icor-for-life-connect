@@ -5,6 +5,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.15.0 are described by their release notes on GitHub.
 
+## [0.18.0] - 2026-11-23
+
+### Changed
+- **Folders, grouped by ICOR stage.** ICOR for Life 3.0 renumbers the vault's
+  folders and groups them by stage. Every folder dashboard now opens with the
+  folders by stage, in order: Input (`00 Daily Notes`, `01 Inbox`), Control
+  (`02 Inner World`, `03 Outer World`, `04 Assets`, `05 Databases`) and Output
+  (`06 Planner`). Refine has no folder; one line says that the AI and the
+  plugins refine from outside, the way any tool would, and so does your weekly
+  review. Each dashboard's heading names its stage and folder ("CONTROL ·
+  02 INNER WORLD"), and a click on another folder opens its dashboard in the
+  same tab. A folder the vault does not have is shown dimmed and does nothing.
+- **"Room" is gone from everything you read.** The dashboards, the notice
+  about a missing folder and the old keys file row all say "folder".
+- **Folders are matched by their full name, never by their number.** 3.0
+  reuses numbers (`04` is now Assets, and a 2.x vault's `06 AI Team` shares its
+  06 with `06 Planner`), so a number no longer says which folder it is. Each
+  folder is found by its 3.0 name first, then by the name a 2.x vault uses
+  (`00 Daily Scratchpad`, `04 Inner World`, `05 Assets`, `06 Outer World`,
+  `07 Databases`, `02 Planner`). A vault that has not moved to 3.0 keeps every
+  dashboard, and nothing ever binds to `03 WiP` or `06 AI Team`. A folder you
+  renamed yourself is no longer found by its number.
+- **Reflections sync into `02 Inner World/ICOR Journey Notes`**, or into
+  `04 Inner World/ICOR Journey Notes` in a 2.x vault: always the Inner World
+  the vault has, never another folder that happens to carry its old number.
+- **"New canvas in Daily Notes"** (was "New canvas in the Daily Scratchpad")
+  files the canvas in `00 Daily Notes/YYYY/MM/`, or in `00 Daily Scratchpad/`
+  while a 2.x vault still has it. The command keeps its id, so a hotkey you
+  set still works.
+- A dashboard left open before the update reopens on the same folder under
+  its new name.
+- The connect screen says "Claude sessions in this vault".
+
+### Added
+- **Dashboards for `05 Databases` and `06 Planner`:** how many files or
+  notes, how many changed this week, and the latest changes.
+
 ## [0.17.0] - 2026-11-20
 
 ### Changed

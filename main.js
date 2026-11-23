@@ -1,5 +1,5 @@
 /*
- * ICOR for Life - Connect: the Obsidian plugin for the ICOR for Life Scaffold.
+ * ICOR for Life - Connect: the Obsidian plugin for ICOR for Life.
  *
  * What it does:
  *   1. Adds a myICOR button at the bottom of the folder tree (file explorer).
@@ -41,11 +41,13 @@ const REGISTER_URL = BASE_URL + '/api/oauth/register';
 const OAUTH_SCOPE = 'mcp:read mcp:tools mcp:progress mcp:inner-circle';
 const VIEW_TYPE = 'myicor-dashboard';
 const AUTH_TIMEOUT_MS = 5 * 60 * 1000;
-/* Where synced reflections land. The room part is resolved at write time from
- * room 04's real folder (see `reflectionsDir`), because this is a path the
- * plugin CREATES: against a renamed room a literal would not fail, it would
- * quietly build a second Inner World beside the real one. */
-const REFLECTIONS_ROOM = '04';
+/* Where synced reflections land. The folder part is resolved at write time
+ * from the Inner World folder the vault really has (see `reflectionsDir`:
+ * `02 Inner World` in ICOR for Life 3.0, `04 Inner World` in a 2.x vault),
+ * because this is a path the plugin CREATES: a literal that no longer matches
+ * would not fail, it would quietly build a second Inner World beside the
+ * real one. */
+const REFLECTIONS_FOLDER = 'inner';
 const REFLECTIONS_SUBDIR = 'ICOR Journey Notes';
 
 /* The myICOR infinity mark (the same drawing as the INKLINE brand mark). */
@@ -222,69 +224,80 @@ function shortDate(v) {
   return t && !isNaN(t) ? t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 }
 
-/* The six rooms and their dashboards. */
+/* The vault's folders and their dashboards, grouped by ICOR stage.
+ * The view type keeps its old id: workspace.json stores it, and renaming it
+ * would close every open folder dashboard on update. */
 const ROOM_VIEW_TYPE = 'micor-room-dash';
-/* A ROOM IS ITS NUMBER. THE WORDS AFTER IT ARE A LABEL.
- *
- * `path` used to be the contract. When `01 INBOX` was renamed `01 Inbox` to
- * match its title-case siblings, the literal here stopped matching in silence:
- * a `data-path` selector that finds nothing throws nothing, so the Inbox simply
- * lost its dashboard button and onboarding pointed at a folder that did not
- * exist. Correcting the literal would leave the same trap armed for the next
- * rename, and there will be one. The same two-character edit cost 27 files and
- * 21 CSS selectors elsewhere.
- *
- * `room` is the identity and it did not move: it is the sort key, and this
- * table's own copy already says so ("ROOM 01 - INBOX"). `path` is now a
- * DECLARATION of the shipped default, resolved against the vault's real folder
- * at load by `resolveRooms()`, so a room may be called anything its owner likes
- * - renamed, translated - and everything downstream keeps working.
- *
- * ICOR for Life 3.0 (0.17.0): work in progress happens in the agent harness,
- * not in the vault, so room 03 is gone and only finished work comes in, as
- * objects. Room 06 is the Outer World: what others made. A vault made before
- * 3.0 has no Outer World, and some still have the retired `06 AI Team`, so
- * the room is `optional` (its absence is not announced) and never binds to a
- * folder named in `retired` (the number alone would claim the old room). */
-const ROOMS = [
-  { room: '00', path: '00 Daily Scratchpad', key: 'scratchpad', title: 'The Scratchpad.', hand: 'raw thought, stamped later', kicker: 'ROOM 00 · DAILY SCRATCHPAD' },
-  { room: '01', path: '01 Inbox', key: 'inbox', title: 'The Inbox.', hand: 'it empties, always', kicker: 'ROOM 01 · INBOX' },
-  { room: '04', path: '04 Inner World', key: 'inner', title: 'The Inner World.', hand: 'what you know and live', kicker: 'ROOM 04 · INNER WORLD' },
-  { room: '05', path: '05 Assets', key: 'assets', title: 'The Shelves.', hand: 'files your notes lean on', kicker: 'ROOM 05 · ASSETS' },
-  { room: '06', path: '06 Outer World', key: 'outer', title: 'The Outer World.', hand: 'what others made', kicker: 'ROOM 06 · OUTER WORLD', optional: true, retired: ['06 AI Team'] },
+
+/* THE ICOR STAGES (0.18.0, ICOR for Life 3.0). The folders are grouped by
+ * stage: Input, Control, Output. Refine has no folder: the AI and the
+ * plugins (AI Chat, Connect, Focus) refine from outside, the way any tool
+ * works on the folder through MCP or an API, and the weekly review does the
+ * rest. The colours are INKLINE's ICOR stage colours; they live in
+ * styles.css (`.micor-stage-<key>`), so they are not repeated here. */
+const STAGES = [
+  { key: 'input', label: 'Input' },
+  { key: 'control', label: 'Control' },
+  { key: 'output', label: 'Output' },
+  { key: 'refine', label: 'Refine', about: 'No folder. The AI and the plugins (AI Chat, Connect, Focus) refine from outside, the way any tool would, and so does your weekly review.' },
 ];
 
-/* The leading room number of a folder name, or null when it carries none. */
-function roomNumberOf(name) {
-  const m = /^(\d{2})/.exec(String(name));
-  return m ? m[1] : null;
+/* A FOLDER IS ITS FULL NAME. NEVER ITS NUMBER.
+ *
+ * Up to 0.17.0 a folder was bound by its number prefix, so a renamed folder
+ * kept its dashboard. ICOR for Life 3.0 renumbered the folders (04 Inner
+ * World is now 02 Inner World, and 04 is Assets), and a 2.x vault still has
+ * `06 AI Team` where 3.0 has `06 Planner`: a number now names a different
+ * folder depending on the vault's age, so binding by number would put the
+ * Inner World's dashboard on the Planner. Each folder is matched by its full
+ * name instead: the 3.0 name first, then the names an older vault used
+ * (`legacy`). `path` is the 3.0 default until `resolveFolders()` binds it to
+ * the folder the vault really has.
+ *
+ * `optional` folders are not announced when missing: a vault made before
+ * 3.0 has no Outer World, and the Databases and Planner folders have no
+ * dashboard of their own beyond a plain list. 3.0 has no work-in-progress
+ * folder (the AI gets no area of its own in the vault), and no entry names
+ * the 2.x team folder, so neither can ever get a dashboard. */
+const FOLDERS = [
+  { key: 'daily', stage: 'input', path: '00 Daily Notes', legacy: ['00 Daily Scratchpad'], title: 'The Daily Notes.', hand: 'raw thought, stamped later' },
+  { key: 'inbox', stage: 'input', path: '01 Inbox', legacy: ['01 INBOX'], title: 'The Inbox.', hand: 'it empties, always' },
+  { key: 'inner', stage: 'control', path: '02 Inner World', legacy: ['04 Inner World'], title: 'The Inner World.', hand: 'what you know and live' },
+  { key: 'outer', stage: 'control', path: '03 Outer World', legacy: ['06 Outer World'], title: 'The Outer World.', hand: 'what others made', optional: true },
+  { key: 'assets', stage: 'control', path: '04 Assets', legacy: ['05 Assets'], title: 'The Shelves.', hand: 'files your notes lean on' },
+  { key: 'databases', stage: 'control', path: '05 Databases', legacy: ['07 Databases'], title: 'The Databases.', hand: 'tables, not notes', optional: true },
+  { key: 'planner', stage: 'output', path: '06 Planner', legacy: ['02 Planner'], title: 'The Planner.', hand: 'what gets done', optional: true },
+];
+for (const f of FOLDERS) f.defaultPath = f.path;
+
+/** The stage a folder belongs to. */
+function stageOf(folder) {
+  return STAGES.find((s) => s.key === (folder && folder.stage)) || null;
 }
 
-/** The vault's own name for a room, by number. Null when the vault has no such room. */
-function findRoomFolder(vault, number, skip) {
+/** The kicker over a folder dashboard: its stage and the folder's own name. */
+function folderKicker(folder) {
+  const stage = stageOf(folder);
+  return ((stage ? stage.label + ' · ' : '') + folder.path).toUpperCase();
+}
+
+/** The vault's top-level folder for this entry, by full name: the 3.0 name, then the older ones. Null when it has none. */
+function findFolder(vault, folder) {
   const root = vault && vault.getRoot ? vault.getRoot() : null;
-  const children = (root && root.children) || [];
-  for (const child of children) {
-    if (child.children === undefined) continue;
-    if (skip && skip.includes(child.name)) continue;
-    if (roomNumberOf(child.name) === number) return child.name;
+  const names = new Set(((root && root.children) || []).filter((c) => c.children !== undefined).map((c) => c.name));
+  for (const name of [folder.defaultPath || folder.path, ...(folder.legacy || [])]) {
+    if (names.has(name)) return name;
   }
   return null;
 }
 
-/** The room a vault path sits in, by number. */
-function roomOfPath(path) {
-  const head = String(path).split('/')[0];
-  return roomNumberOf(head);
-}
-
-/** The room a stored path names, matched by its number rather than its words. */
-function roomFor(path) {
+/** The folder a stored path names: by its bound path, its 3.0 name or an older name, always the full first segment. */
+function folderFor(path) {
   if (!path) return null;
-  const exact = ROOMS.find((r) => r.path === path);
-  if (exact) return exact;
-  const number = roomOfPath(path);
-  return number ? ROOMS.find((r) => r.room === number) || null : null;
+  const head = String(path).split('/')[0];
+  return FOLDERS.find((f) => f.path === head)
+    || FOLDERS.find((f) => f.defaultPath === head || (f.legacy || []).includes(head))
+    || null;
 }
 
 /* ------------------------------------------------------------------------- *
@@ -378,8 +391,9 @@ function callbackHtml(ok, detail) {
  *                     `..`, so it cannot leave the vault.
  *
  *                     Before 0.17.0 the default was
- *                     `06 AI Team/AI Team Knowledge/.env`, in a room the
- *                     vault no longer has. The old default in data.json
+ *                     `06 AI Team/AI Team Knowledge/.env`, in a 2.x folder
+ *                     the vault no longer has (3.0's `06 Planner` shares
+ *                     the number only; the path is matched in full). The old default in data.json
  *                     reads as the new one; while the new file is missing
  *                     and the old one is there, the old one is the file
  *                     read and written (EnvFileBackend's fallback), the
@@ -415,6 +429,8 @@ const SECRET_FIELDS = {
 const SECRET_FIELD_NAMES = Object.keys(SECRET_FIELDS);
 const SECRETS_BACKENDS = ['secret-storage', 'env-file'];
 const DEFAULT_ENV_FILE_PATH = '.icor-for-life/.env';
+/* A 2.x vault's legacy folder, kept only so such a vault stays connected. A full
+   path, never matched by its 06 (3.0's `06 Planner` shares the number). */
 const LEGACY_ENV_FILE_PATH = '06 AI Team/AI Team Knowledge/.env';
 const BACKEND_LABELS = {
   'secret-storage': "Obsidian's keychain",
@@ -763,26 +779,29 @@ class MyicorConnectPlugin extends Plugin {
     });
     /* The only one of the four with logic of its own, and the only one that
        had no other route at all before this. Canvases land beside the notes
-       they sketch: 00 Daily Scratchpad/YYYY/MM, the date-nested shape the
-       scaffold's validator enforces, named YYYY-MM-DD_canvas, with -N on
+       they sketch: <Daily Notes folder>/YYYY/MM (`00 Daily Notes`, or
+       `00 Daily Scratchpad` in a 2.x vault), the date-nested shape the
+       vault's validator enforces, named YYYY-MM-DD_canvas, with -N on
        collisions. The year and month folders are created on first use;
        createFolder throws on a folder that exists, so each level is checked
        before it is created and the parent is never assumed. */
     this.addCommand({
+      /* The id stays: saved hotkeys point at it. */
       id: 'new-scratchpad-canvas',
-      name: 'New canvas in the Daily Scratchpad',
+      name: 'New canvas in Daily Notes',
       callback: async () => {
         const d = new Date();
         const pad = (n) => String(n).padStart(2, '0');
         const year = String(d.getFullYear());
         const month = pad(d.getMonth() + 1);
-        const folder = '00 Daily Scratchpad/' + year + '/' + month;
+        const root = this.dailyNotesFolder();
+        const folder = root + '/' + year + '/' + month;
         const base = folder + '/' + year + '-' + month + '-' + pad(d.getDate()) + '_canvas';
         let path = base + '.canvas';
         let i = 1;
         while (this.app.vault.getAbstractFileByPath(path)) path = base + '-' + i++ + '.canvas';
         try {
-          for (const dir of ['00 Daily Scratchpad/' + year, folder]) {
+          for (const dir of [root + '/' + year, folder]) {
             if (!this.app.vault.getAbstractFileByPath(dir)) await this.app.vault.createFolder(dir);
           }
           const file = await this.app.vault.create(path, '{"nodes":[],"edges":[]}');
@@ -827,21 +846,21 @@ class MyicorConnectPlugin extends Plugin {
     /* Folder-tree button: attach once the layout exists, re-attach whenever
      * the file explorer leaf is rebuilt. */
     this.app.workspace.onLayoutReady(() => {
-      this.resolveRooms();
+      this.resolveFolders();
       this.sweepRetiredRail();
       this.attachExplorerButton();
       this.attachBanner();
       this.attachRoomButtons();
       this.syncCollapseSlot();
       /* the explorer re-renders folder rows on collapse/expand and vault
-       * changes; keep the room buttons present without leaking observers */
+       * changes; keep the folder buttons present without leaking observers */
       const explorer = document.querySelector('.workspace-leaf-content[data-type="file-explorer"]');
       if (explorer && !this.roomObserver) {
         this.roomObserver = new MutationObserver(() => {
-          /* The slot is synced UNDEBOUNCED and the room buttons are not.
-             Collapsing a room is a direct result of a click, so a quarter
+          /* The slot is synced UNDEBOUNCED and the folder buttons are not.
+             Collapsing a folder is a direct result of a click, so a quarter
              second of lag between the click and the control reacting reads as
-             the control being broken. Re-attaching room buttons is repair work
+             the control being broken. Re-attaching folder buttons is repair work
              nobody is watching, so it keeps its debounce. */
           this.syncCollapseSlot();
           window.clearTimeout(this.roomObserverTimer);
@@ -867,7 +886,7 @@ class MyicorConnectPlugin extends Plugin {
     for (const row of document.querySelectorAll('.micor-tree-slot')) {
       row.classList.remove('micor-tree-slot', 'micor-can-collapse');
     }
-    /* Every class here but the last is LIVE - room buttons, top buttons,
+    /* Every class here but the last is LIVE - folder buttons, top buttons,
        and the four vault-action buttons back on the explorer toolbar - and
        their nodes come off on the way out like anything else this plugin
        owns. Only `.micor-toolbar-extra` is RETIRED: it was the shared class
@@ -956,7 +975,8 @@ class MyicorConnectPlugin extends Plugin {
       changed = true;
     }
     await this.ensureGitignore();
-    /* 0.17.0: a vault whose keys are still in the old file (room 06) is
+    /* 0.17.0: a vault whose keys are still in the old file (the 2.x
+       `06 AI Team` folder, read for legacy vaults only) is
        asked once whether to copy it to the new place. The flag is saved
        below before the question is shown, so it is never asked twice. */
     let offerMove = false;
@@ -989,7 +1009,7 @@ class MyicorConnectPlugin extends Plugin {
     if (offerMove) this.offerEnvFileMove();
   }
 
-  /* ---- the env file's move out of room 06 (0.17.0) ----
+  /* ---- the env file's move out of the 2.x `06 AI Team` folder (0.17.0) ----
      Asked once at load, and on offer in the settings tab while the old
      file is the one in use. Every sentence names paths only. */
   offerEnvFileMove() {
@@ -1134,7 +1154,7 @@ class MyicorConnectPlugin extends Plugin {
    * permanent because Obsidian registers no command for it and that button is
    * its ONLY route (measured against the app bundle: eight file-explorer
    * command ids, none of them sort), and "collapse all", which is made
-   * CONDITIONAL because it is only ever worth a click when more than one room
+   * CONDITIONAL because it is only ever worth a click when more than one folder
    * is open.
    *
    * The slot is Obsidian's own `.nav-buttons-container`. We do not build one
@@ -1148,13 +1168,13 @@ class MyicorConnectPlugin extends Plugin {
    * by whatever the host puts inside it.
    * ---------------------------------------------------------------- */
 
-  /* How many TOP-LEVEL rooms are open.
+  /* How many TOP-LEVEL folders are open.
    *
    * Top-level only, and depth is never counted. The condition has to have the
    * same shape as the effect: collapse-all collapses to the roots, so a count
    * taken at any other depth produces a control that can be offered when its
    * click would do nothing, or withheld when its click would do a lot. It also
-   * means drilling in and out inside one room never crosses the threshold, so
+   * means drilling in and out inside one folder never crosses the threshold, so
    * the control does not twitch while somebody is working. */
   unfoldedRootCount() {
     const container = document.querySelector('.nav-files-container');
@@ -1171,7 +1191,7 @@ class MyicorConnectPlugin extends Plugin {
     return open;
   }
 
-  /* Threshold is 2. One open room is collapsed with one click on the room
+  /* Threshold is 2. One open folder is collapsed with one click on the folder
    * itself, and a second control for that is a marking on a one. */
   syncCollapseSlot() {
     const row = document.querySelector(
@@ -1183,7 +1203,7 @@ class MyicorConnectPlugin extends Plugin {
 
   /* The discovery affordance, and it is a command rather than a tooltip.
    * A first-run hint would fire in the instant the user just opened a second
-   * room, which is the instant they are doing something else. The command
+   * folder, which is the instant they are doing something else. The command
    * palette is where an Obsidian user looks for a function they suspect
    * exists, and it makes the function hotkey-bindable for free.
    *
@@ -1355,7 +1375,7 @@ class MyicorConnectPlugin extends Plugin {
     setIcon(daily, 'calendar-check');
     daily.addEventListener('click', () => runOwn('open-daily-note'));
 
-    const canvas = createDiv({ cls: 'clickable-icon nav-action-button micor-new-canvas', attr: { 'aria-label': 'New canvas in the Daily Scratchpad' } });
+    const canvas = createDiv({ cls: 'clickable-icon nav-action-button micor-new-canvas', attr: { 'aria-label': 'New canvas in Daily Notes' } });
     setIcon(canvas, 'layout-dashboard');
     canvas.addEventListener('click', () => runOwn('new-scratchpad-canvas'));
 
@@ -1391,52 +1411,59 @@ class MyicorConnectPlugin extends Plugin {
     right.appendChild(gear);
   }
 
-  /* Bind every room to the folder the vault ACTUALLY has for its number, and
-   * say so out loud when one is missing.
+  /* Bind every folder to the one the vault ACTUALLY has, by full name (the
+   * 3.0 name first, then an older vault's), and say so out loud when one is
+   * missing.
    *
    * The failure this closes is not a crash, it is a shrug: a `data-path`
-   * selector that matches nothing throws nothing, so a renamed room lost its
-   * dashboard button and its onboarding entry without a single line in the
-   * console, and the plugin just quietly did less. A contract keyed on a value
-   * somebody else can change has to announce it when it breaks. Said once, at
-   * load, and never again. */
-  resolveRooms() {
+   * selector that matches nothing throws nothing, so a missing folder lost its
+   * dashboard button without a single line in the console, and the plugin
+   * just quietly did less. Said once, at load, and never again. */
+  resolveFolders() {
     const missing = [];
-    for (const room of ROOMS) {
-      const found = findRoomFolder(this.app.vault, room.room, room.retired);
-      if (found) room.path = found;
-      else if (!room.optional) missing.push(room.room);
+    for (const folder of FOLDERS) {
+      const found = findFolder(this.app.vault, folder);
+      folder.path = found || folder.defaultPath;
+      if (!found && !folder.optional) missing.push(folder.defaultPath);
     }
-    /* A vault with no numbered rooms at all is not a scaffold, and telling
-     * somebody their plain vault is broken would be the louder wrong answer. */
-    if (missing.length === ROOMS.filter((r) => !r.optional).length) return;
+    /* A vault with none of the folders is not an ICOR for Life vault, and
+     * telling somebody their plain vault is broken would be the louder wrong
+     * answer. */
+    if (missing.length === FOLDERS.filter((f) => !f.optional).length) return;
     if (missing.length === 0) return;
-    const message = 'ICOR for Life - Connect: this vault has no room ' + missing.join(', ')
-      + '. Those dashboards and their folder buttons are unavailable until the rooms are there.';
+    const message = 'ICOR for Life - Connect: this vault has no ' + missing.join(', ') + ' folder'
+      + (missing.length === 1 ? '. Its dashboard and folder button are' : 's. Their dashboards and folder buttons are')
+      + ' unavailable until the folder' + (missing.length === 1 ? ' is' : 's are') + ' there.';
     console.warn(message);
     new Notice(message, 12000);
   }
 
-  /** Where synced reflections land, under room 04's real folder. */
+  /** Where synced reflections land, under the Inner World folder the vault really has. */
   reflectionsDir() {
-    const room = ROOMS.find((r) => r.room === REFLECTIONS_ROOM);
-    const base = (room && room.path) || findRoomFolder(this.app.vault, REFLECTIONS_ROOM);
-    if (!base) throw new Error('this vault has no room ' + REFLECTIONS_ROOM + ', so there is nowhere to sync reflections into');
+    const inner = FOLDERS.find((f) => f.key === REFLECTIONS_FOLDER);
+    const base = findFolder(this.app.vault, inner);
+    if (!base) throw new Error('this vault has no ' + inner.defaultPath + ' folder, so there is nowhere to sync reflections into');
     return base + '/' + REFLECTIONS_SUBDIR;
+  }
+
+  /** The Daily Notes folder the vault really has (`00 Daily Notes`, or `00 Daily Scratchpad` in a 2.x vault), else the 3.0 name. */
+  dailyNotesFolder() {
+    const daily = FOLDERS.find((f) => f.key === 'daily');
+    return findFolder(this.app.vault, daily) || daily.defaultPath;
   }
 
   attachRoomButtons() {
     this.attachToolbarButtons();
     this.attachTopButtons();
-    for (const room of ROOMS) {
-      const title = document.querySelector('.nav-folder-title[data-path="' + room.path + '"]');
+    for (const folder of FOLDERS) {
+      const title = document.querySelector('.nav-folder-title[data-path="' + folder.path + '"]');
       if (!title || title.querySelector('.micor-room-btn')) continue;
-      const btn = title.createDiv({ cls: 'micor-room-btn', attr: { 'aria-label': room.path + ' dashboard' } });
+      const btn = title.createDiv({ cls: 'micor-room-btn', attr: { 'aria-label': folder.path + ' dashboard' } });
       setIcon(btn, 'gauge');
       btn.addEventListener('click', (ev) => {
         ev.stopPropagation();
         ev.preventDefault();
-        this.openRoomDashboard(room.path);
+        this.openRoomDashboard(folder.path);
       });
     }
   }
@@ -1895,7 +1922,7 @@ class MyicorConnectPlugin extends Plugin {
     const lines = [this.app.vault.configDir + '/plugins/' + this.manifest.id + '/data.json'];
     if (this.secretsBackend() === 'env-file') {
       lines.push(this.envFilePath());
-      /* While the old file (room 06) is the one in use, it is covered too. */
+      /* While the old file (the 2.x `06 AI Team` folder) is the one in use, it is covered too. */
       let at = null;
       try { at = await this.secretsStore().locate(); } catch { at = null; }
       if (at && at.onLegacy && !lines.includes(at.active)) lines.push(at.active);
@@ -2009,7 +2036,7 @@ class MyicorConnectSettingTab extends PluginSettingTab {
       if (at && at.legacyExists) {
         const row = new Setting(el).setName('Old keys file');
         if (at.onLegacy) {
-          row.setDesc('Your keys are still in ' + store.fallback + ', a room this vault no longer needs. Copy the file to ' + store.path + ', the new place ICOR for Life tools read it from. The old file stays until you remove it.')
+          row.setDesc('Your keys are still in ' + store.fallback + ', a folder this vault no longer needs. Copy the file to ' + store.path + ', the new place ICOR for Life tools read it from. The old file stays until you remove it.')
             .addButton((b) => b.setButtonText('Copy to the new place').setCta().onClick(async () => {
               await plugin.moveEnvFileFromLegacy();
               this.display();
@@ -2386,8 +2413,8 @@ class DashboardView extends ItemView {
   /* What Connect does in this vault: the reflections sync, Claude's connection, and the knowledge search. */
   async renderVaultRows(list) {
     const st = this.plugin.data.reflectionSync;
-    let where = REFLECTIONS_ROOM + ' Inner World/' + REFLECTIONS_SUBDIR;
-    try { where = this.plugin.reflectionsDir(); } catch { /* no room 04: the default name stands */ }
+    let where = FOLDERS.find((f) => f.key === REFLECTIONS_FOLDER).defaultPath + '/' + REFLECTIONS_SUBDIR;
+    try { where = this.plugin.reflectionsDir(); } catch { /* no Inner World folder: the 3.0 name stands */ }
     const syncSub = (s) => (s ? s.totalLocal + ' in ' + where + ' · last sync ' + new Date(s.lastSyncAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Your Growth Assignment reflections, as notes you own');
     this.row(list, {
       icon: 'notebook-pen', ok: !!st, title: 'Reflections', sub: syncSub(st),
@@ -2580,7 +2607,7 @@ class DashboardView extends ItemView {
     for (const [icon, text] of [
       ['gauge', 'Your ICOR Journey, courses, and Growth Assignment progress, live in the vault'],
       ['search', 'Search lessons, resources, and founder answers without leaving Obsidian'],
-      ['bot', 'Claude sessions in this scaffold gain myICOR context through the same connection'],
+      ['bot', 'Claude sessions in this vault gain myICOR context through the same connection'],
       ['lock', 'OAuth in your browser. Keys stay on this machine and never reach git'],
     ]) {
       const row = points.createDiv({ cls: 'micor-hero-point' });
@@ -2628,7 +2655,9 @@ class DashboardView extends ItemView {
 }
 
 /* ------------------------------------------------------------------------- *
- * Room dashboards — six vault-local dashboards, one per room. All metrics
+ * Folder dashboards: vault-local dashboards, one per folder, each opening
+ * with the folders grouped by ICOR stage (Input, Control, Output, and
+ * Refine, which has no folder). All metrics
  * are computed from the vault itself (files, frontmatter, mtimes): code
  * does the counting. No myICOR connection required.
  * ------------------------------------------------------------------------- */
@@ -2637,23 +2666,26 @@ class RoomDashboardView extends ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
-    this.room = ROOMS[0].path;
+    /* `room` is the name the saved workspace state uses (see getState), so
+     * the property keeps it; it holds the bound folder's path. */
+    this.room = FOLDERS[0].path;
   }
 
   getViewType() { return ROOM_VIEW_TYPE; }
   getDisplayText() {
-    const room = roomFor(this.room);
-    return room ? room.path.replace(/^\d+ /, '') : 'Room';
+    const folder = folderFor(this.room);
+    return folder ? folder.path.replace(/^\d+ /, '') : 'Folder';
   }
   getIcon() { return 'gauge'; }
 
   getState() { return { room: this.room }; }
   async setState(state, result) {
-    /* Workspace state stores a PATH, and a room can be renamed between two
-     * launches. Matching on the number too means a rename reopens the room the
-     * user left open instead of silently dropping them back to room 00. */
-    const room = state && state.room ? roomFor(state.room) : null;
-    if (room) this.room = room.path;
+    /* Workspace state stores a PATH, and the folders were renamed in 3.0
+     * (04 Inner World became 02 Inner World). Matching the full name against
+     * the older names too reopens the folder the member left open instead of
+     * dropping them back to Daily Notes, and never by its number. */
+    const folder = state && state.room ? folderFor(state.room) : null;
+    if (folder) this.room = folder.path;
     await super.setState(state, result);
     this.renderRoom();
   }
@@ -2700,27 +2732,72 @@ class RoomDashboardView extends ItemView {
   renderRoom() {
     if (!this.root) return;
     this.root.empty();
-    const room = roomFor(this.room) || ROOMS[0];
+    const folder = folderFor(this.room) || FOLDERS[0];
 
     const mast = this.root.createDiv({ cls: 'micor-masthead' });
-    mast.createDiv({ cls: 'micor-masthead-kicker', text: room.kicker });
-    const h1 = mast.createEl('h1', { cls: 'micor-masthead-title', text: room.title });
-    const hand = h1.createSpan({ cls: 'micor-masthead-hand', text: room.hand });
+    mast.createDiv({ cls: 'micor-masthead-kicker', text: folderKicker(folder) });
+    const h1 = mast.createEl('h1', { cls: 'micor-masthead-title', text: folder.title });
+    const hand = h1.createSpan({ cls: 'micor-masthead-hand', text: folder.hand });
     hand.setAttribute('aria-hidden', 'true');
     strokeEl(mast, 'micor-masthead-stroke');
 
     const body = this.root.createDiv({ cls: 'micor-page' });
+    this.renderStages(body, folder);
     const fn = {
-      scratchpad: () => this.renderScratchpad(body),
+      daily: () => this.renderDaily(body),
       inbox: () => this.renderInbox(body),
       inner: () => this.renderInner(body),
-      assets: () => this.renderAssets(body),
       outer: () => this.renderOuter(body),
-    }[room.key];
+      assets: () => this.renderAssets(body),
+      databases: () => this.renderPlain(body, { what: 'files', empty: 'Objects.base and data too large for notes live here' }),
+      planner: () => this.renderPlain(body, { what: 'notes', empty: 'tasks from your task apps land here through ICOR for Life - Planner' }),
+    }[folder.key];
     fn && fn();
 
     const footer = this.root.createDiv({ cls: 'micor-footer' });
     footer.createSpan({ text: 'COMPUTED LIVE FROM THE VAULT · ' + new Date().toLocaleTimeString() });
+  }
+
+  /* The folders by ICOR stage, in folder order: Input (00 Daily Notes,
+   * 01 Inbox), Control (02 Inner World to 05 Databases), Output (06 Planner),
+   * then Refine, which has no folder and says so in one line. The open
+   * folder is marked; a folder this vault does not have is shown, dimmed,
+   * and does nothing. A click opens that folder's dashboard in this view. */
+  renderStages(body, current) {
+    const vault = this.plugin.app.vault;
+    const exists = (f) => (vault && typeof vault.getAbstractFileByPath === 'function' ? !!vault.getAbstractFileByPath(f.path) : true);
+    const map = body.createDiv({ cls: 'micor-stages', attr: { 'aria-label': 'Folders by ICOR stage' } });
+    for (const stage of STAGES) {
+      const row = map.createDiv({ cls: 'micor-stage micor-stage-' + stage.key });
+      row.createDiv({ cls: 'micor-stage-label', text: stage.label });
+      const list = row.createDiv({ cls: 'micor-stage-folders' });
+      const folders = FOLDERS.filter((f) => f.stage === stage.key);
+      if (!folders.length) {
+        list.createDiv({ cls: 'micor-stage-about', text: stage.about });
+        continue;
+      }
+      for (const f of folders) {
+        const here = f === current;
+        const present = exists(f);
+        const chip = list.createEl('button', {
+          cls: 'micor-stage-folder' + (here ? ' is-current' : '') + (present ? '' : ' is-missing'),
+          text: f.path,
+        });
+        if (here) chip.setAttribute('aria-current', 'page');
+        if (!present) {
+          chip.setAttribute('disabled', 'true');
+          chip.setAttribute('aria-label', f.path + ', not in this vault');
+          continue;
+        }
+        chip.addEventListener('click', () => {
+          if (this.room === f.path) return;
+          this.room = f.path;
+          this.renderRoom();
+          const ws = this.plugin.app.workspace;
+          if (ws && typeof ws.requestSaveLayout === 'function') ws.requestSaveLayout();
+        });
+      }
+    }
   }
 
   sect(body, kicker, bodyText) {
@@ -2769,13 +2846,13 @@ class RoomDashboardView extends ItemView {
     return [...files].sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, n || 6);
   }
 
-  /* ------------------------------------------------------ 00 scratchpad -- */
+  /* ----------------------------------------------------- 00 daily notes -- */
 
-  renderScratchpad(body) {
+  renderDaily(body) {
     const notes = this.notes();
     const daily = notes.filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f.basename));
     /* A quick capture is named by the moment it was made, in one of the three
-       shapes the scaffold's validator accepts: YYYY-MM-DD-HHmmss (the Unique
+       shapes the vault's validator accepts: YYYY-MM-DD-HHmmss (the Unique
        note creator the new-note button runs, -N on a same-second collision),
        the older YYYYMMDDHHmm (Obsidian's " 2" on a collision, " - title" when
        the member names it after the fact), and YYYYMMDDHHmmss with -N. */
@@ -2790,7 +2867,7 @@ class RoomDashboardView extends ItemView {
     this.slab(band, captures.length, null, 'quick captures');
 
     const todo = this.sect(body, 'NEEDS PROCESSING', unprocessed.length
-      ? 'Unprocessed thought is invisible thought. Ask Larry to process the scratchpad.'
+      ? 'Unprocessed thought is invisible thought. Ask Larry to process your daily notes.'
       : null);
     this.fileRows(todo, this.recent(unprocessed, 6), { empty: 'everything is stamped — clean desk' });
 
@@ -2821,7 +2898,7 @@ class RoomDashboardView extends ItemView {
     this.fileRows(arch, this.recent(archived, 5), { empty: 'processed captures will land here' });
   }
 
-  /* ----------------------------------------------------- 03 inner world -- */
+  /* ----------------------------------------------------- 02 inner world -- */
 
   renderInner(body) {
     const journal = this.notes('Journal');
@@ -2921,7 +2998,23 @@ class RoomDashboardView extends ItemView {
     });
   }
 
-  /* ----------------------------------------------------- 06 outer world -- */
+  /* ------------------------------------------ 05 databases · 06 planner -- */
+
+  /* A plain list for the folders other tools fill: the Databases (bases and
+   * row-shaped data, no notes) and the Planner (tasks synced by ICOR for
+   * Life - Planner). Counts and the latest changes, nothing to judge. */
+  renderPlain(body, opts) {
+    const o = opts || {};
+    const all = o.what === 'notes' ? this.notes() : this.files().filter((f) => f.name !== 'README.md');
+    const week = all.filter((f) => this.daysAgo(f.stat.mtime) < 7);
+    const band = this.slabBand(body);
+    this.slab(band, all.length, null, o.what === 'notes' ? 'notes' : 'files');
+    this.slab(band, week.length, null, 'changed this week');
+    const latest = this.sect(body, 'LATEST CHANGES');
+    this.fileRows(latest, this.recent(all, 8), { empty: o.empty, title: o.what === 'notes' ? null : (f) => f.name });
+  }
+
+  /* ----------------------------------------------------- 03 outer world -- */
 
   /* One note per thing someone else made (`type: source`), from the Web
    * Clipper, Readwise or by hand. The fields are the vault schema's:
@@ -2980,9 +3073,9 @@ Object.assign(module.exports, {
   DashboardView, PAGES, pageFor,
   /* The Home's model, exported for test/home.test.mjs. */
   HOME_PLACES, JOURNEY_SLUGS, courseSlugOf, courseProgress, buildProgress, byUs, newestFromUs, nextCourse, homeModel, PLACE_MARK_SVG,
-  /* The room table and the Outer World's two field readers, exported for
-     test/rooms.test.mjs. */
-  ROOMS, outerUnread, outerLinked,
-  /* The room views, exported for test/scratchpad-capture-count.test.mjs. */
+  /* The stages, the folder table and the Outer World's two field readers,
+     exported for test/folders.test.mjs. */
+  STAGES, FOLDERS, folderFor, folderKicker, outerUnread, outerLinked,
+  /* The folder views, exported for test/scratchpad-capture-count.test.mjs. */
   RoomDashboardView,
 });
