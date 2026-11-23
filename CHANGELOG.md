@@ -5,6 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.15.0 are described by their release notes on GitHub.
 
+## [0.18.1] - 2026-11-23
+
+Ready for the Obsidian community directory's review.
+
+### Fixed
+- **Keys stay in Obsidian's keychain, and no more random sign-outs** (the
+  0.17.0 fixes below, now in this line too): Connect needs Obsidian 1.11.4.
+- **Signing in no longer uses a desktop-only module.** The PKCE values are
+  made with the browser's own Web Crypto instead of Node's `crypto`.
+- **The page your browser shows after signing in** escapes the error text it
+  repeats from the address bar.
+- **A `.mcp.json` that is not valid JSON is left as it is.** Connecting Claude
+  used to replace it, losing your other servers; Connect now says so and
+  stops. A valid file keeps every other server.
+
+### Changed
+- **Reflections are written through Obsidian's vault**, not straight to the
+  disk, like every other note.
+- The myICOR marks are drawn as elements, never set as an HTML string.
+- README: what Connect writes at the top of your vault (`.mcp.json`,
+  `.gitignore`).
+
 ## [0.18.0] - 2026-11-23
 
 ### Changed

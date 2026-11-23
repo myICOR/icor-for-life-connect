@@ -73,6 +73,13 @@ to the new place. The old file stays until you remove it.
   `02 Inner World/ICOR Journey Notes`, and a new canvas into
   `00 Daily Notes/YYYY/MM/` when you ask for one.
 - **Stores your connection keys** where the setting above says.
+- **Adds myICOR to `.mcp.json`** at the top of your vault when you connect
+  Claude, so the Claude sessions in this vault can search myICOR too. Your
+  other servers in that file stay as they are; a file that is not valid JSON
+  is left alone and Connect says so.
+- **Lists its settings file in `.gitignore`** at the top of your vault (and
+  the env file, while your keys live there), creating `.gitignore` if the
+  vault has none, so a vault kept in git never carries a key.
 
 ## Good to know
 

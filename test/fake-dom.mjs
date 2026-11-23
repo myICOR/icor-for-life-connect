@@ -101,6 +101,7 @@ class FakeEl {
   createDiv(opts) { return this.appendChild(makeEl('div', opts)); }
   createSpan(opts) { return this.appendChild(makeEl('span', opts)); }
   createEl(tag, opts) { return this.appendChild(makeEl(tag, opts)); }
+  createSvg(tag, opts) { return this.appendChild(makeEl(tag, opts)); }
   * walk() {
     for (const child of this.children) { yield child; yield* child.walk(); }
   }

@@ -26,7 +26,7 @@
 
 'use strict';
 
-const { Plugin, ItemView, Notice, requestUrl, setIcon, Platform, PluginSettingTab, Setting } = require('obsidian');
+const { Plugin, ItemView, Notice, requestUrl, setIcon, Platform, PluginSettingTab, Setting, TFile } = require('obsidian');
 
 const BASE_URL = 'https://app.myicor.com';
 /* The public landing page, which is NOT the member app: the banner is the one
@@ -51,10 +51,27 @@ const REFLECTIONS_FOLDER = 'inner';
 const REFLECTIONS_SUBDIR = 'ICOR Journey Notes';
 
 /* The myICOR infinity mark (the same drawing as the INKLINE brand mark). */
+const MARK_PATH = 'M50 55 C50 18 92 18 120 55 C148 92 190 92 190 55 C190 18 148 18 120 55 C92 92 50 92 50 55 Z';
+/* As markup only for the sign-in page the loopback server sends to the browser (callbackHtml). */
 const MARK_SVG =
   '<svg viewBox="0 0 240 110" fill="none" xmlns="http://www.w3.org/2000/svg">' +
-  '<path d="M50 55 C50 18 92 18 120 55 C148 92 190 92 190 55 C190 18 148 18 120 55 C92 92 50 92 50 55 Z" ' +
+  '<path d="' + MARK_PATH + '" ' +
   'stroke="currentColor" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>';
+
+/* In the vault the mark is built with Obsidian's createSvg, never from an HTML
+ * string: the community directory's review refuses an HTML string set on an
+ * element unless it is a literal, and a drawing made of elements cannot carry
+ * markup it was not meant to. */
+function drawMark(parent) {
+  const svg = parent.createSvg('svg', { attr: { viewBox: '0 0 240 110', fill: 'none' } });
+  svg.createSvg('path', {
+    attr: {
+      d: MARK_PATH, stroke: 'currentColor', 'stroke-width': '9',
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round', fill: 'none',
+    },
+  });
+  return svg;
+}
 
 /* The dashboard's pages (0.17.0, the new Home). Home is app.myicor.com's Home as far as the myICOR MCP can serve it;
  * the other three are the plugin's own lists. `overview`, the old Your Loop page, opens Home. */
@@ -71,7 +88,8 @@ const pageFor = (key) => PAGES.find((p) => p.key === (PAGE_ALIASES[key] || key))
  * SVG so currentColor keeps it tokenized. Exactly one per view. */
 function strokeEl(parent, cls) {
   const el = parent.createDiv({ cls });
-  el.innerHTML = '<svg viewBox="0 0 170 9" aria-hidden="true"><path d="M2 6.5 C 40 2.5, 92 2, 128 4.5 C 146 5.8, 160 5.2, 168 4"/></svg>';
+  const svg = el.createSvg('svg', { attr: { viewBox: '0 0 170 9', 'aria-hidden': 'true' } });
+  svg.createSvg('path', { attr: { d: 'M2 6.5 C 40 2.5, 92 2, 128 4.5 C 146 5.8, 160 5.2, 168 4' } });
   return el;
 }
 
@@ -301,11 +319,13 @@ function folderFor(path) {
 }
 
 /* ------------------------------------------------------------------------- *
- * PKCE helpers (Node crypto — desktop only, declared in manifest)
+ * PKCE helpers (Web Crypto: no Node module, the same on every device)
  * ------------------------------------------------------------------------- */
 
-function b64url(buf) {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+function b64url(bytes) {
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /* The OAuth consent MUST open in the system browser, never in Obsidian's
@@ -337,12 +357,17 @@ function openInSystemBrowser(url) {
   }
 }
 
-function makePkce() {
-  const crypto = require('crypto');
-  const verifier = b64url(crypto.randomBytes(48));
-  const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
-  const state = b64url(crypto.randomBytes(16));
+async function makePkce() {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  const challenge = b64url(new Uint8Array(digest));
+  const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
   return { verifier, challenge, state };
+}
+
+/* Text for an HTML page, escaped: the error detail comes from the redirect's query string. */
+function escapeHtml(text) {
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /* Minimal HTML shown in the browser tab after the OAuth redirect lands. */
@@ -350,7 +375,7 @@ function callbackHtml(ok, detail) {
   const title = ok ? 'Connected' : 'Not connected';
   const msg = ok
     ? 'Your vault is now connected to myICOR. You can close this tab and return to Obsidian.'
-    : 'The connection was not completed' + (detail ? ' (' + detail + ')' : '') + '. You can close this tab and try again from Obsidian.';
+    : 'The connection was not completed' + (detail ? ' (' + escapeHtml(detail) + ')' : '') + '. You can close this tab and try again from Obsidian.';
   return '<!doctype html><html><head><meta charset="utf-8"><title>myICOR — ' + title + '</title>' +
     '<style>body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;' +
     'background:#0c0e12;color:#f6f3ec;font:16px/1.6 -apple-system,BlinkMacSystemFont,system-ui,sans-serif}' +
@@ -1321,7 +1346,7 @@ class MyicorConnectPlugin extends Plugin {
 
     const btn = footer.createDiv({ cls: 'micor-explorer-button' });
     const mark = btn.createDiv({ cls: 'micor-explorer-mark' });
-    mark.innerHTML = MARK_SVG;
+    drawMark(mark);
     btn.createSpan({ cls: 'micor-explorer-label', text: 'myICOR' });
     const chevron = btn.createDiv({ cls: 'micor-explorer-chevron' });
     setIcon(chevron, 'chevron-up');
@@ -1534,8 +1559,7 @@ class MyicorConnectPlugin extends Plugin {
       throw new Error('connecting requires the desktop app');
     }
     const http = require('http');
-    require('crypto');
-    const pkce = makePkce();
+    const pkce = await makePkce();
 
     const codePromise = new Promise((resolve, reject) => {
       this.authServer = http.createServer((req, res) => {
@@ -1853,18 +1877,20 @@ class MyicorConnectPlugin extends Plugin {
     if (this.syncInFlight) throw new Error('a sync is already running');
     this.syncInFlight = true;
     try {
-      const adapter = this.app.vault.adapter;
+      /* Reflections are notes, so they go through the Vault API (Obsidian's
+       * cache and its serial writes), never straight to the disk adapter. */
+      const vault = this.app.vault;
       const reflectionsDir = this.reflectionsDir();
-      if (!(await adapter.exists(reflectionsDir))) await adapter.mkdir(reflectionsDir);
+      if (!vault.getFolderByPath(reflectionsDir)) await vault.createFolder(reflectionsDir);
 
       /* Which reflections already live in the vault? The myicor_id in
        * frontmatter is the sync key; the note content is never compared,
        * because local notes belong to the user once created. */
       const existing = new Set();
-      const listing = await adapter.list(reflectionsDir);
-      for (const f of listing.files || []) {
-        if (!f.endsWith('.md')) continue;
-        const head = String(await adapter.read(f)).slice(0, 800);
+      const folder = vault.getFolderByPath(reflectionsDir);
+      for (const f of (folder && folder.children) || []) {
+        if (!(f instanceof TFile) || f.extension !== 'md') continue;
+        const head = String(await vault.cachedRead(f)).slice(0, 800);
         const m = head.match(/^myicor_id:\s*([0-9a-f-]{36})\s*$/m);
         if (m) existing.add(m[1]);
       }
@@ -1892,11 +1918,11 @@ class MyicorConnectPlugin extends Plugin {
         if (!refl || !refl.answer || !String(refl.answer).trim()) { skipped.add(r.id); continue; }
         const when = refl.answered_at || refl.completed_at || refl.created_at || nowIso;
         let path = reflectionsDir + '/' + String(when).slice(0, 10) + '_' + this.reflectionSlug(refl.question_text) + '.md';
-        if (await adapter.exists(path)) {
+        if (vault.getAbstractFileByPath(path)) {
           path = path.replace(/\.md$/, '-' + String(refl.id).slice(0, 8) + '.md');
         }
-        if (await adapter.exists(path)) continue; /* same reflection, same day: already there */
-        await adapter.write(path, this.reflectionNote(refl, nowIso));
+        if (vault.getAbstractFileByPath(path)) continue; /* same reflection, same day: already there */
+        await vault.create(path, this.reflectionNote(refl, nowIso));
         created++;
         if (progressCb) progressCb(created, fresh.length);
       }
@@ -1917,16 +1943,30 @@ class MyicorConnectPlugin extends Plugin {
 
   /* ---------------------------------------------- Claude context wiring -- */
 
+  /* `.mcp.json` is a dotfile, which Obsidian's vault index does not list, so
+   * it is read and written through the adapter. A file that is not valid
+   * JSON is left exactly as it is: rewriting it would lose the member's
+   * other servers. Returns whether myICOR is wired. */
   async wireClaude() {
     const adapter = this.app.vault.adapter;
     let cfg = {};
     if (await adapter.exists('.mcp.json')) {
-      try { cfg = JSON.parse(await adapter.read('.mcp.json')); } catch (e) { cfg = {}; }
+      try {
+        cfg = JSON.parse(await adapter.read('.mcp.json'));
+      } catch (e) {
+        new Notice('myICOR: .mcp.json in your vault is not valid JSON, so Claude was not connected and the file was left as it is. Fix or remove it, then connect Claude again.', 12000);
+        return false;
+      }
+      if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) {
+        new Notice('myICOR: .mcp.json in your vault is not a JSON object, so Claude was not connected and the file was left as it is.', 12000);
+        return false;
+      }
     }
     if (!cfg.mcpServers || typeof cfg.mcpServers !== 'object') cfg.mcpServers = {};
     /* URL only — Claude Code runs its own OAuth against the same server. */
     cfg.mcpServers.myicor = { type: 'http', url: MCP_URL };
     await adapter.write('.mcp.json', JSON.stringify(cfg, null, 2) + '\n');
+    return true;
   }
 
   async isClaudeWired() {
@@ -2177,7 +2217,7 @@ class DashboardView extends ItemView {
     const top = this.root.createDiv({ cls: 'micor-top' });
     const brand = top.createDiv({ cls: 'micor-top-brand' });
     const m = brand.createDiv({ cls: 'micor-top-mark' });
-    m.innerHTML = MARK_SVG;
+    drawMark(m);
     brand.createSpan({ cls: 'micor-top-name', text: 'myICOR' });
 
     const nav = top.createEl('nav', { cls: 'micor-pages', attr: { 'aria-label': 'Pages' } });
@@ -2629,7 +2669,7 @@ class DashboardView extends ItemView {
   renderConnectHero() {
     const hero = this.root.createDiv({ cls: 'micor-hero' });
     const mark = hero.createDiv({ cls: 'micor-hero-mark' });
-    mark.innerHTML = MARK_SVG;
+    drawMark(mark);
     hero.createEl('h1', { text: 'myICOR', cls: 'micor-hero-title' });
     hero.createDiv({ cls: 'micor-hero-sub', text: 'Connect this vault to your app.myicor.com account.' });
 
@@ -3101,6 +3141,8 @@ Object.assign(module.exports, {
   KeychainBackend, EnvFileBackend, secretStatusText, MyicorConnectSettingTab,
   /* The dashboard view and its pages. */
   DashboardView, PAGES, pageFor,
+  /* The sign-in helpers, exported for test/sign-in.test.mjs. */
+  makePkce, b64url, escapeHtml, callbackHtml,
   /* The Home's model, exported for test/home.test.mjs. */
   HOME_PLACES, JOURNEY_SLUGS, courseSlugOf, courseProgress, buildProgress, byUs, newestFromUs, nextCourse, homeModel, PLACE_MARK_SVG,
   /* The stages, the folder table and the Outer World's two field readers,
