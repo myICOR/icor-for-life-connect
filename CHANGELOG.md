@@ -5,6 +5,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versions follow [Semantic Versioning](https://semver.org/).
 Releases before 0.15.0 are described by their release notes on GitHub.
 
+## [0.18.4] - 2026-11-23
+
+### Changed
+- Connect no longer writes into the file explorer's button row. Up to 0.18.3 it put two classes on Obsidian's row for a theme rule that INKLINE 1.9.0 dropped; ICOR Interface 0.11.0 now decides whether the row shows. A row an older build marked is cleaned on load. **Collapse all folders** in the command palette still presses Obsidian's own button.
+
 ## [0.18.3] - 2026-11-23
 
 ### Changed

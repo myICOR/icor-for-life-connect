@@ -869,18 +869,13 @@ class MyicorConnectPlugin extends Plugin {
       this.attachExplorerButton();
       this.attachBanner();
       this.attachRoomButtons();
-      this.syncCollapseSlot();
       /* the explorer re-renders folder rows on collapse/expand and vault
        * changes; keep the folder buttons present without leaking observers */
       const explorer = document.querySelector('.workspace-leaf-content[data-type="file-explorer"]');
       if (explorer && !this.roomObserver) {
         this.roomObserver = new MutationObserver(() => {
-          /* The slot is synced UNDEBOUNCED and the folder buttons are not.
-             Collapsing a folder is a direct result of a click, so a quarter
-             second of lag between the click and the control reacting reads as
-             the control being broken. Re-attaching folder buttons is repair work
-             nobody is watching, so it keeps its debounce. */
-          this.syncCollapseSlot();
+          /* Re-attaching folder buttons is repair work nobody is watching,
+             so it is debounced. */
           window.clearTimeout(this.roomObserverTimer);
           this.roomObserverTimer = window.setTimeout(() => this.attachRoomButtons(), 250);
         });
@@ -890,7 +885,6 @@ class MyicorConnectPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on('layout-change', () => {
       this.attachExplorerButton();
       this.attachBanner();
-      this.syncCollapseSlot();
     }));
   }
 
@@ -898,12 +892,6 @@ class MyicorConnectPlugin extends Plugin {
     if (this.explorerButtonEl) this.explorerButtonEl.remove();
     if (this.bannerEl) this.bannerEl.remove();
     if (this.roomObserver) this.roomObserver.disconnect();
-    /* The slot classes are ours and the container is Obsidian's, so they come
-       off on the way out. Left behind they would outlive the CSS that reads
-       them and hide a control the host still owns. */
-    for (const row of document.querySelectorAll('.micor-tree-slot')) {
-      row.classList.remove('micor-tree-slot', 'micor-can-collapse');
-    }
     /* The folder buttons, the top buttons and the banner are LIVE, and their
        nodes come off on the way out like anything else this plugin owns.
        The rest are RETIRED: the four vault-action buttons this plugin put
@@ -942,6 +930,13 @@ class MyicorConnectPlugin extends Plugin {
     /* The body class, not the dashboard's own `.micor-rail` path element:
        only the rail build ever put this on <body>. */
     document.body.classList.remove('micor-rail');
+    /* The file explorer's button row is Obsidian's (0.18.4). Up to 0.18.3 this
+       plugin put two classes on it, `micor-tree-slot` and `micor-can-collapse`,
+       for a theme rule INKLINE dropped in 1.9.0. Nothing is written into the
+       row any more; a row an older build marked is handed back clean. */
+    for (const row of document.querySelectorAll('.micor-tree-slot, .micor-can-collapse')) {
+      row.classList.remove('micor-tree-slot', 'micor-can-collapse');
+    }
   }
 
   async saveSettings() {
@@ -1164,60 +1159,14 @@ class MyicorConnectPlugin extends Plugin {
 
   /* ------------------------------------------------- folder tree button -- */
 
-  /* ---------------------------------------------------------------- *
-   * THE FILE-TREE HEADER SLOT
-   *
-   * The toolbar row under the banner is reduced to the controls that are
-   * actually file-tree actions. Two survive: "change sort order", which is
-   * permanent because Obsidian registers no command for it and that button is
-   * its ONLY route (measured against the app bundle: eight file-explorer
-   * command ids, none of them sort), and "collapse all", which is made
-   * CONDITIONAL because it is only ever worth a click when more than one folder
-   * is open.
-   *
-   * The slot is Obsidian's own `.nav-buttons-container`. We do not build one
-   * beside it: the collapse-all button is already the right glyph with the
-   * right accessible name and a working handler, so making it conditional is a
-   * class toggle rather than a reimplementation.
-   *
-   * THE CLASS GOES ON THE CONTAINER, NEVER ON THE BUTTON. Obsidian re-creates
-   * those buttons on its own schedule, so a class on the button is lost on the
-   * next re-render and has to be chased; a class on the container is inherited
-   * by whatever the host puts inside it.
+  /* THE FILE EXPLORER'S BUTTON ROW IS OBSIDIAN'S (0.18.4).
+   * Nothing is written into `.nav-buttons-container`: no class, no button.
+   * Up to 0.18.3 the row carried `micor-tree-slot` / `micor-can-collapse` so the
+   * theme could show Collapse all only with two or more folders open; INKLINE
+   * 1.9.0 dropped that rule and ICOR Interface 0.11.0 now decides whether the
+   * row shows at all. The row is only read, to find Obsidian's own Collapse all
+   * button for the command below.
    * ---------------------------------------------------------------- */
-
-  /* How many TOP-LEVEL folders are open.
-   *
-   * Top-level only, and depth is never counted. The condition has to have the
-   * same shape as the effect: collapse-all collapses to the roots, so a count
-   * taken at any other depth produces a control that can be offered when its
-   * click would do nothing, or withheld when its click would do a lot. It also
-   * means drilling in and out inside one folder never crosses the threshold, so
-   * the control does not twitch while somebody is working. */
-  unfoldedRootCount() {
-    const container = document.querySelector('.nav-files-container');
-    if (!container) return 0;
-    const rootChildren =
-      container.querySelector('.nav-folder.mod-root > .nav-folder-children')
-      || container.querySelector(':scope > .nav-folder-children');
-    if (!rootChildren) return 0;
-    let open = 0;
-    for (const child of rootChildren.children) {
-      if (!child.classList.contains('nav-folder')) continue;
-      if (!child.classList.contains('is-collapsed')) open += 1;
-    }
-    return open;
-  }
-
-  /* Threshold is 2. One open folder is collapsed with one click on the folder
-   * itself, and a second control for that is a marking on a one. */
-  syncCollapseSlot() {
-    const row = document.querySelector(
-      '.workspace-leaf-content[data-type="file-explorer"] .nav-buttons-container');
-    if (!row) return;
-    row.classList.add('micor-tree-slot');
-    row.classList.toggle('micor-can-collapse', this.unfoldedRootCount() >= 2);
-  }
 
   /* The discovery affordance, and it is a command rather than a tooltip.
    * A first-run hint would fire in the instant the user just opened a second
