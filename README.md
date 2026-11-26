@@ -1,4 +1,4 @@
-# ICOR for Life - Connect
+# ICOR Connect
 
 **Your myICOR membership, next to your notes.**
 
@@ -24,19 +24,36 @@ where you actually are on the Journey without opening a browser.
 2. Click the **myICOR** button at the bottom of the file explorer and connect
    your account. The dot next to the button shows the connection state.
 
-That is the setup. Your dashboard opens from the same button.
+That is the setup. Your dashboard opens from the same button, or from the
+gauge icon in the ribbon on the left (move or hide it in Settings,
+Appearance, Ribbon menu).
+
+Today's daily note, a new unique note, a new canvas in `00 Daily Notes` and
+the graph view are commands: run them from the command palette or give them
+a hotkey.
 
 ## What you get
 
-**The ICOR Journey dashboard.** Your stage and milestones drawn on the Loop,
-Growth Assignment progress and average score, your reflections, streaks, and a
-breakdown by category.
+**Your myICOR Home, inside the vault.** The Home of app.myicor.com: where you
+left off, the newest videos, articles and podcasts from Tom and Paco, and one
+card for each part of the roadmap (ICOR Kickstart, ICOR Journey, ICOR Teams,
+ICOR AI, ICOR Coaching and ICOR Build) with your progress where myICOR can
+share it. Your mentions, events and the week's poll open on app.myicor.com.
 
 **Knowledge-base search.** The Inner Circle library, searchable from inside
 the vault.
 
 **Your reflections as notes.** They sync into your vault as ordinary notes
-that you own.
+that you own, in `02 Inner World/ICOR Journey Notes` (`04 Inner World/` in a
+vault made before ICOR for Life 3.0).
+
+**A dashboard for every folder.** Hover a folder and click the gauge. Each
+dashboard counts what is in the folder, computed live from the vault, and
+opens with your folders grouped by ICOR stage: Input (`00 Daily Notes`,
+`01 Inbox`), Control (`02 Inner World`, `03 Outer World`, `04 Assets`,
+`05 Databases`) and Output (`06 Planner`). Refine has no folder: the AI and
+the plugins refine from outside, and so does your weekly review. A vault made
+before 3.0 keeps its dashboards under its old folder names.
 
 **Courses and lessons**, reachable without a browser tab.
 
@@ -48,12 +65,27 @@ One setting decides whether the connection stays on this device or follows
 the vault to every device you sync. Pick the one that matches how you work;
 the setting explains both in plain words before you choose.
 
+If you choose the file, it is `.icor-for-life/.env`, in the vault's hidden
+system folder, the same file ICOR Planner and AI Chat use. Obsidian's
+file list does not show that folder. A vault that still keeps the file in its
+old place stays connected: Connect reads it there, and offers once to copy it
+to the new place. The old file stays until you remove it.
+
 ## What it touches
 
 - **Talks to app.myicor.com** to fetch your own membership data. That is the
   point of the plugin, and it is the only place it connects to.
-- **Writes your reflections into your vault** as notes you own.
+- **Writes your reflections into your vault** as notes you own, in
+  `02 Inner World/ICOR Journey Notes`, and a new canvas into
+  `00 Daily Notes/YYYY/MM/` when you ask for one.
 - **Stores your connection keys** where the setting above says.
+- **Adds myICOR to `.mcp.json`** at the top of your vault when you connect
+  Claude, so the Claude sessions in this vault can search myICOR too. Your
+  other servers in that file stay as they are; a file that is not valid JSON
+  is left alone and Connect says so.
+- **Lists its settings file in `.gitignore`** at the top of your vault (and
+  the env file, while your keys live there), creating `.gitignore` if the
+  vault has none, so a vault kept in git never carries a key.
 
 ## Good to know
 

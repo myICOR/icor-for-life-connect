@@ -4,7 +4,7 @@
  * terminal shortcut alongside the settings gear, wired to the retired
  * third-party Terminal plugin's command
  * (`terminal:open-terminal.integrated.root`). That route is gone: the
- * terminal is ICOR for Life - Terminal now, launched from its own toolbar
+ * terminal is ICOR Terminal now, launched from its own toolbar
  * entry under the ICOR for Life logo in the left side panel, not from this
  * row. This gate proves the removal is real and stays real:
  *

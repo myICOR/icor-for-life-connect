@@ -1,6 +1,6 @@
 # Security Policy
 
-ICOR for Life - Connect is an Obsidian plugin that signs you in to your app.myicor.com
+ICOR Connect is an Obsidian plugin that signs you in to your app.myicor.com
 account from inside your vault and exposes vault context over MCP. It holds an
 OAuth token and it opens a local loopback listener during sign-in. Those are the
 two parts worth attacking, and we would rather hear about a problem early than
@@ -67,10 +67,26 @@ Measured against the shipped `main.js` of v0.8.2:
 
 **Authentication.** The plugin performs an OAuth flow against `app.myicor.com`. The
 callback is received on a **loopback listener on `127.0.0.1`**, which is the
-standard pattern for a native client. The resulting token is stored in Obsidian's
-per-plugin `data.json` inside the vault, at
-`.obsidian/plugins/icor-for-life-connect/data.json`. That file is git-ignored in this
-repository and the token is sent to no host other than `app.myicor.com`.
+standard pattern for a native client. Since 0.15.0 the two tokens live in the
+backend a setting chooses: Obsidian's keychain (`app.secretStorage`, outside the
+vault), or an env file inside the vault, by default `.icor-for-life/.env` (since
+0.17.0; before that `06 AI Team/AI Team Knowledge/.env`). The env file sits in the
+vault's hidden system folder, which Obsidian does not index, so it is read and
+written through the vault adapter only. While the new file is missing and the old
+one exists, the old one is read and written; the plugin offers once to copy it to
+the new place and never deletes it without the member's click. While the env file
+is the backend in use, its path is added to the vault's `.gitignore`. The
+per-plugin `data.json` keeps scope and expiry only. Neither file is in this
+repository (both are git-ignored here), and a token is sent to no host other than
+`app.myicor.com`.
+
+**What it writes in the vault.** Synced reflections go into `ICOR Journey Notes`
+inside the Inner World folder the vault has: `02 Inner World` in ICOR for Life 3.0
+(since 0.18.0), `04 Inner World` in an older vault. The canvas command writes into
+`00 Daily Notes/YYYY/MM/` (`00 Daily Scratchpad/` in an older vault). Folders are
+matched by their full name, never by their number prefix. The vault-root
+`.mcp.json` receives the myICOR server URL, and `.gitignore` the paths of `data.json`
+and the env file.
 
 **Where it connects.** The only remote host referenced in the shipped bundle is
 `app.myicor.com`, plus the `127.0.0.1` loopback used for the OAuth callback. There

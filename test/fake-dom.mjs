@@ -26,6 +26,9 @@ class FakeEl {
     /* Inline styles land here as plain properties (`el.style.height`);
        the loop gate reads the rail ink's height back off it. */
     this.style = Object.create(null);
+    /* style.setProperty, for a custom property (the Home's meter writes --micor-p); not enumerable, so a gate that
+       reads the style back sees only what was set. */
+    Object.defineProperty(this.style, 'setProperty', { value: (k, v) => { this.style[k] = String(v); }, enumerable: false });
   }
   /* Obsidian's HTMLElement helpers, the ones the Overview path calls.
      Added 2026-09-09 for the loop gate; a gate that renders a whole page
@@ -98,6 +101,7 @@ class FakeEl {
   createDiv(opts) { return this.appendChild(makeEl('div', opts)); }
   createSpan(opts) { return this.appendChild(makeEl('span', opts)); }
   createEl(tag, opts) { return this.appendChild(makeEl(tag, opts)); }
+  createSvg(tag, opts) { return this.appendChild(makeEl(tag, opts)); }
   * walk() {
     for (const child of this.children) { yield child; yield* child.walk(); }
   }

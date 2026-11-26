@@ -60,7 +60,7 @@ const ONLY_ROUTE = [
 const HAS_ANOTHER_ROUTE = [
   ['New note', 'the plugin registers New unique note; core Daily notes registers its own'],
   ['Reveal current file', 'file-explorer:reveal-active-file'],
-  ['New folder', 'deliberately removed as a function; rooms are the AI team\'s job'],
+  ['New folder', 'deliberately removed as a function; the vault\'s folders are fixed by ICOR for Life'],
 ];
 
 for (const { label, why } of ONLY_ROUTE) {
